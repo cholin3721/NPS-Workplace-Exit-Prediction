@@ -1,0 +1,10 @@
+pandas>=2.0
+numpy
+matplotlib
+seaborn
+scikit-learn>=1.3
+imbalanced-learn
+xgboost
+lightgbm
+requests
+jupyter
