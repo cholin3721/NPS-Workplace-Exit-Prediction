@@ -26,6 +26,8 @@ tcap = pd.read_csv(os.path.join(RES, 'time_validation_capture.csv'), encoding='u
 tv = extra[extra['분석'] == '시간 기반 검증']
 seg = extra[extra['분석'] == '업종 분리'].set_index('세부')
 sens = extra[extra['분석'] == '민감도']
+pca_cmp = pd.read_csv(os.path.join(RES, 'pca_vs_original.csv'), encoding='utf-8-sig', index_col=0)
+pca_km = pd.read_csv(os.path.join(RES, 'pca_kmeans_profile.csv'), encoding='utf-8-sig', index_col=0)
 wide_fi = pd.read_csv(os.path.join(RES, 'wide_definition_importance.csv'), encoding='utf-8-sig', index_col=0).iloc[:, 0]
 
 doc = Document()
@@ -255,6 +257,7 @@ B('로지스틱 회귀, 결정트리, 랜덤포레스트, AdaBoost, XGBoost, Lig
 B('없음 / class_weight / SMOTE / ADASYN / FI-SMOTE — 오버샘플링은 학습셋에만 적용하고 소수 클래스를 다수 클래스의 10%까지 증식', '불균형 처리: ')
 B('학습셋을 층화 5-겹으로 나눠 RandomForest × {없음, SMOTE, ADASYN, FI-SMOTE}를 5번 반복하여 평균·표준편차·우위 횟수 비교', '반복 검증: ')
 B('랜덤포레스트 n_estimators·min_samples_leaf·max_features 12개 조합, PR-AUC 기준 3-겹 교차검증 GridSearchCV (9주차)', '튜닝: ')
+B('표준화 후 PCA로 설명된 분산·2차원 시각화, 원본 vs PCA 축소 데이터의 성능 비교, PCA 공간 K-means 군집 (보충 노트북 pca_analysis.ipynb)', '차원 축소(13주차): ')
 B('시간 기반 검증(4월 기준 학습 → 7월 기준 평가), 건설업 분리 평가, 정답 정의 민감도 분석', '추가 검증: ')
 B('Precision, Recall, F1, MCC, ROC-AUC, PR-AUC, 그리고 실무 관점의 "위험 점수 상위 k% 점검 시 포착률(Recall@k%)"', '평가지표: ')
 P('FI-SMOTE는 본인이 2026년 1학기에 직접 만든 오버샘플링 기법이다. 랜덤포레스트의 특성 중요도로 중요 변수를 고른 뒤, '
@@ -368,6 +371,30 @@ P(f'3개월 뒤 파일에서 사라진 사업장까지 탈퇴로 보면 탈퇴�
   f'(무작위 기준선 {wd["탈퇴율(%)"]/100:.3f}의 약 {wd["PR-AUC"]/(wd["탈퇴율(%)"]/100):.1f}배), ROC-AUC는 {wd["ROC-AUC"]:.3f}였다. '
   f'정답 정의를 바꿔도 예측력은 유지되었으며, 이때 가장 중요한 변수는 {wide_fi.index[0]}·{wide_fi.index[1]}·{wide_fi.index[2]} 순이었다. '
   '사라진 사업장은 인원이 줄어 공개 범위에서 빠진 경우가 많아, 상실률(퇴사 비율)이 중요해진 것으로 해석된다.')
+
+H('3.6 차원 축소(PCA)로 본 데이터 구조', 2)
+P('13주차에서 배운 주성분 분석(PCA)을 17개 입력 변수에 적용하였다. 단위가 다른 변수가 주성분을 독차지하지 않도록 먼저 표준화하였다. '
+  '누적 설명 분산 90%에 12개 주성분이 필요했고, 첫 두 주성분은 분산의 32%만 설명하였다. 과일 사진(1만 픽셀)처럼 변수끼리 정보가 많이 겹치는 '
+  '데이터와 달리, 이 데이터는 변수 간 상관이 낮아(그림 5) 줄일 여지가 작다.')
+F('15_pca_scatter.png', '[그림 13] PCA 2차원 산점도 — 탈퇴 사업장(주황)이 유지 사업장 사이에 섞여 있다', width=9.5)
+P('2차원으로 줄여 그리면 탈퇴 사업장이 별도의 무리를 이루지 않고 유지 사업장 사이에 흩어져 있다. 직선 하나로 나눌 수 없는 문제이므로, '
+  '여러 변수의 조합을 학습하는 트리 앙상블이 필요한 이유를 보여준다.')
+pc = pca_cmp.copy()
+pc['PR-AUC'] = [f'{m:.3f} ± {d:.3f}' for m, d in zip(pc['PR-AUC'], pc['PR-AUC std'])]
+pc['ROC-AUC'] = pc['ROC-AUC'].map(f3); pc['학습 시간(s)'] = pc['학습 시간(s)'].map(lambda x: f'{x:.1f}')
+pc = pc[['PR-AUC', 'ROC-AUC', '학습 시간(s)']].reset_index()
+T(pc, '[표 13] 원본 변수와 PCA 축소 데이터의 RandomForest 성능 (층화 5-겹, 15만 행 표본)', widths=[5.0, 3.6, 2.6, 2.8], highlight_rows=(0,))
+o, p90 = pca_cmp.iloc[0], pca_cmp.iloc[1]
+P(f'교안의 "분류기와 함께 사용하기"처럼 원본과 PCA로 줄인 데이터를 같은 RandomForest로 비교하였다(PCA는 각 학습 fold 안에서만 fit). '
+  f'90% 분산을 유지한 12개 주성분으로 학습하면 PR-AUC가 {o["PR-AUC"]:.3f}에서 {p90["PR-AUC"]:.3f}로 낮아졌고, 학습 시간도 오히려 늘었다. '
+  '과일 사진처럼 변수가 수만 개라면 차원 축소로 속도와 성능을 얻지만, 변수가 17개뿐이고 서로 독립적인 이 데이터에서는 정보 손실만 생겼다. '
+  '또 주성분은 여러 변수를 섞은 값이라 "업력이 짧을수록 위험" 같은 해석이 어려워진다. 그래서 최종 모델은 원본 변수를 사용하였고, '
+  'FI-SMOTE도 차원을 줄이는 대신 원본 변수에 중요도 가중을 주는 방식을 택한다.')
+top = pca_km.iloc[0]
+P(f'PCA 공간(12개 주성분)에서 K-means로 4개 군집을 나눈 결과, 탈퇴율이 가장 높은 군집은 {top["탈퇴율"]:.2f}%로 전체 평균(0.40%)의 약 '
+  f'{top["탈퇴율"]/0.396:.1f}배였다. 이 군집은 최근 3개월 내 신규 등록 비율이 {top["신규진입_비율"]*100:.0f}%로 높았다. '
+  '정답 없이 묶는 비지도 군집만으로는 위험 사업장을 이 정도로만 가려낼 수 있었고, 정답을 학습한 지도학습 모델(상위 5% 점검 시 무작위의 약 13배)이 '
+  '훨씬 효과적이었다.')
 
 # ───────────────────────── 4. 결론 ─────────────────────────
 H('4. 결론')

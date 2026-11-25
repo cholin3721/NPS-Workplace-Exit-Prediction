@@ -182,23 +182,21 @@ s.addNotes('데이터를 먼저 살펴봤더니, 직원이 1~4명인 작은 회�
 
 // 6. 어려웠던 점 -------------------------------------------------------------
 s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '어떻게' });
-s.addText('어려웠던 점: 1,000곳 중 4곳을 찾는 문제', { placeholder: 'title' });
-card(s, 0.5, 1.05, 4.4, 1.75, HEX.lt2, 'trap card');
-s.addText([
-  { text: '"다 괜찮다"고만 해도 정답률 99.6%', options: { bold: true, fontSize: 15, color: HEX.accent1, breakLine: true } },
-  { text: '그래서 정답률 대신 "문 닫을 회사를 몇 곳 찾았나"로 평가했다', options: { fontSize: 13, color: HEX.dk1 } },
-], { x: 0.7, y: 1.1, w: 4.0, h: 1.65, valign: 'middle', margin: 0, paraSpaceAfter: 6, isTextBox: true, objectName: 'trap text' });
-card(s, 0.5, 2.95, 4.4, 1.9, HEX.lt2, 'fismote card');
-s.addText([
-  { text: '해결: 예시를 늘려서 학습 (FI-SMOTE)', options: { bold: true, fontSize: 15, color: HEX.accent2, breakLine: true } },
-  { text: '탈퇴한 회사 예시가 너무 적어서, 진짜와 비슷한 가상 예시를 만들어 학습시켰다. 1학기에 직접 만든 방법 (원리는 다음 장)', options: { fontSize: 13, color: HEX.dk1 } },
-], { x: 0.7, y: 3.0, w: 4.0, h: 1.8, valign: 'middle', margin: 0, paraSpaceAfter: 6, isTextBox: true, objectName: 'fismote text' });
-s.addChart(pres.charts.BAR, [{ name: 'F1', labels: N.samplers.map((x) => SAMPLER_PLAIN[x]), values: N.cv5_f1 }], Object.assign({
-  x: 5.1, y: 1.0, w: 4.4, h: 3.85, barDir: 'col', chartColors: [HEX.accent3, HEX.accent3, HEX.accent3, HEX.accent1],
-  showValue: true, dataLabelPosition: 'outEnd', dataLabelFormatCode: '0.00', valAxisHidden: true, valAxisMaxVal: 0.25, showLegend: false,
-  showTitle: true, title: '탈퇴 회사를 맞힌 정도 (F1, 5번 반복 평균)', titleFontSize: 12, titleColor: HEX.dk2, objectName: 'sampler f1 chart',
-}, axis));
-s.addNotes(`어려웠던 점은 탈퇴하는 회사가 1,000곳 중 4곳밖에 안 된다는 겁니다. 그래서 "다 괜찮다"고만 말해도 정답률이 99.6%가 나옵니다. 그래서 정답률 대신 문 닫을 회사를 몇 곳이나 찾았는지로 평가했습니다. 또 탈퇴 예시가 너무 적어서, 제가 1학기에 만든 FI-SMOTE로 진짜와 비슷한 가상 예시를 만들어 학습시켰습니다. 다섯 번 반복해서 비교했는데, 다른 방법들보다 매번 더 잘 찾았습니다. 알고리즘은 교안에서 배운 7개를 비교해서 랜덤포레스트를 골랐습니다.`);
+s.addText('어려웠던 점: 1,000곳 중 4곳, 그마저 섞여 있다', { placeholder: 'title' });
+const hard = [
+  ['"다 괜찮다"고만 해도 정답률 99.6%', '그래서 정답률 대신 "문 닫을 회사를 몇 곳 찾았나"로 평가', HEX.accent1],
+  ['2차원으로 펼쳐 봐도 섞여 있다 (PCA)', '13주차 PCA로 17개 특징을 2개로 줄여 그려 봄 → 선 하나로 못 나눔 → 여러 특징을 조합하는 랜덤포레스트 사용', HEX.dk2],
+  ['해결: 예시를 늘려서 학습 (FI-SMOTE)', `5번 반복 평균 F1: 그대로 ${N.cv5_f1[0].toFixed(2)} → SMOTE ${N.cv5_f1[1].toFixed(2)} → FI-SMOTE ${N.cv5_f1[fiIdx].toFixed(2)} (원리는 다음 장)`, HEX.accent2],
+];
+hard.forEach((h, i) => {
+  const y = 1.0 + i * 1.27;
+  card(s, 0.5, y, 4.6, 1.15, HEX.lt2, 'hard card ' + (i + 1));
+  s.addText([{ text: h[0], options: { bold: true, fontSize: 14, color: h[2], breakLine: true } }, { text: h[1], options: { fontSize: 11.5, color: HEX.dk1 } }],
+    { x: 0.7, y: y + 0.05, w: 4.25, h: 1.05, valign: 'middle', margin: 0, paraSpaceAfter: 4, isTextBox: true, objectName: 'hard text ' + (i + 1) });
+});
+s.addImage({ path: FIG('15_pca_scatter.png'), x: 5.3, y: 0.98, w: 4.2, h: 3.6, objectName: 'pca scatter', altText: 'PCA 2차원 산점도: 탈퇴 사업장(주황)이 유지 사업장(파랑) 사이에 섞여 있음' });
+s.addText('PCA 2차원 산점도 · 주황 = 3개월 내 탈퇴, 파랑 = 유지', { x: 5.3, y: 4.6, w: 4.2, h: 0.25, fontSize: 10, color: C.accent5, align: 'center', margin: 0, isTextBox: true, objectName: 'pca caption' });
+s.addNotes(`어려웠던 점은 두 가지입니다. 첫째, 탈퇴하는 회사가 1,000곳 중 4곳밖에 안 돼서 "다 괜찮다"고만 해도 정답률이 99.6%가 나옵니다. 그래서 정답률 대신 몇 곳을 찾았는지로 평가했습니다. 둘째, 13주차에 배운 PCA로 17개 특징을 두 개로 줄여 그려 보면, 오른쪽처럼 탈퇴 회사(주황)가 유지 회사 사이에 섞여 있습니다. 선 하나로 나눌 수 없어서 여러 특징을 조합하는 랜덤포레스트를 썼습니다. 그리고 탈퇴 예시가 너무 적어서 제가 만든 FI-SMOTE로 예시를 늘렸더니, 다섯 번 반복 평균 F1이 그대로 쓸 때보다 두 배 이상 좋아졌습니다.`);
 
 // 6-2. FI-SMOTE 원리 ----------------------------------------------------------
 s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '어떻게' });

@@ -18,6 +18,7 @@
 | 주요 요인 | 신규진입(최근 3개월 내 등록) · 업력 · 가입자 규모 · 취득률 · 고지금액 증감률 |
 | 시간 기반 검증 | 2026-04 기준으로 학습 → 2026-07 기준으로 평가: ROC-AUC **0.862**, 상위 5% 포착 **58.7%** |
 | 건설업 제외 | ROC-AUC 0.797, 상위 5% 포착 48.0% (무작위의 약 10배) |
+| PCA (13주차) | 90% 분산에 17개 중 12개 주성분 필요, PCA로 줄이면 PR-AUC 0.183 → 0.147 → 원본 변수 사용 |
 
 - 전부 "유지"라고 찍어도 정확도는 99.6% → 정확도 대신 Precision·Recall·F1·PR-AUC로 평가
 - 층화 5-겹 반복 검증에서 FI-SMOTE는 **5번 모두 SMOTE·ADASYN보다 PR-AUC·F1·MCC가 높았고**, 오버샘플링 없음보다 F1이 5/5회 높았다 (PR-AUC는 오버샘플링 없음이 더 높음)
@@ -31,8 +32,10 @@
 ```
 NPS-Workplace-Exit-Prediction/
 ├── nps_exit_prediction.ipynb   # 전체 분석 노트북 (실행 결과 포함)
+├── pca_analysis.ipynb          # 보충 분석: PCA 차원 축소·시각화·군집 (13주차)
 ├── src/
 │   ├── download_data.py        # 공공데이터포털에서 월별 CSV 내려받기
+│   ├── dataset.py              # 데이터 만들기 함수 (보충 노트북에서 사용)
 │   └── fi_smote.py             # FI-SMOTE 오버샘플링 (본인 1학기 연구 코드 이식)
 ├── figures/                    # 노트북이 저장한 그래프 (보고서·발표자료에 사용)
 ├── results/                    # 모델 비교·불균형 처리·임계값·중요도 결과 CSV
@@ -62,6 +65,7 @@ jupyter notebook nps_exit_prediction.ipynb
 7. **튜닝** – GridSearchCV (PR-AUC 기준)
 8. **평가·해석** – 임계값 트레이드오프, 혼동행렬, 상위 k% 포착률, 특성 중요도
 9. **추가 검증** – 불균형 처리 5-겹 반복, 시간 기반 검증, 건설업 분리, 정답 정의 민감도
+10. **차원 축소(PCA)** – 설명된 분산, 2차원 시각화, 원본 vs PCA 성능 비교, PCA + K-means 군집 (`pca_analysis.ipynb`)
 
 ## 데이터 출처
 
