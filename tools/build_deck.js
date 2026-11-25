@@ -69,219 +69,228 @@ function bullets(slide, items, opts) {
 
 // ── 숫자: tools/deck_numbers.py 가 results/*.csv 에서 만든 값 ──────────────
 const N = JSON.parse(require('fs').readFileSync(path.join(ROOT, 'tools', 'deck_numbers.json'), 'utf8'));
-const pct1 = (x) => (x * 100).toFixed(1) + '%';
-const fi = N.samplers.indexOf('FI-SMOTE');
-const winF1 = N.wins['FI-SMOTE > SMOTE'].F1;
+const fiIdx = N.samplers.indexOf('FI-SMOTE');
+const top5 = Math.round(N.final['Recall@상위5%'] * 100);
+const top5Time = Math.round(N.time['Recall@상위5%'] * 100);
+const top5NoCon = Math.round(N.seg['건설업 제외']['Recall@상위5%'] * 100);
+const PLAIN = { '신규진입': '최근 3개월 내 새로 등록', '업력': '회사 나이(업력)', '가입자수': '직원 수', '취득률': '입사자 비율',
+  '고지금액증감률_3개월': '월급 총액 변화(3개월)', '업종대분류': '업종', '상실률': '퇴사자 비율', '1인당고지금액': '1인당 월급 수준' };
+const SAMPLER_PLAIN = { '없음': '그대로', 'SMOTE': 'SMOTE', 'ADASYN': 'ADASYN', 'FI-SMOTE': 'FI-SMOTE\n(직접 만든 방법)' };
 
-// 1. Title ----------------------------------------------------------------
-pres.addSection({ title: '도입' });
-let s = pres.addSlide({ masterName: 'TITLE_DARK', sectionTitle: '도입' });
-s.addText('국민연금 가입 사업장 데이터로 본\n사업장 탈퇴 3개월 조기 예측', { placeholder: 'title' });
-s.addText('데이터분석 기말대체 프로젝트\n인하공업전문대학 컴퓨터정보공학과 202444085 김철중', { placeholder: 'body' });
-s.addNotes('안녕하세요, 202444085 김철중입니다. 국민연금 가입 사업장 공공데이터로 3개월 안에 국민연금 가입을 탈퇴할 사업장, 즉 폐업하거나 문을 닫을 사업장을 미리 찾아낼 수 있는지 분석했습니다.');
+function sourceNote(slide, text) {
+  slide.addText(text, { x: 0.5, y: 4.95, w: 9.0, h: 0.25, fontSize: 9, color: C.accent5, margin: 0, isTextBox: true, objectName: 'source note' });
+}
 
-// 2. Problem + related work ------------------------------------------------
-s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '도입' });
-s.addText('재무제표보다 빠른 탈퇴 신호를 찾을 수 있을까', { placeholder: 'title' });
-bullets(s, [
-  '폐업 위험은 보통 재무제표로 보지만, 갱신이 느리고 소규모 사업장은 공개되지 않는다',
-  '국민연금공단은 전국 사업장의 가입자 수·고지금액·입퇴사자 수를 매월 공개한다',
-  { text: '질문: 지금 가입된 사업장 중 3개월 안에 탈퇴할 곳을 미리 찾을 수 있는가?', bold: true },
-], { x: 0.5, y: 1.05, w: 5.4, h: 2.6 });
-card(s, 6.2, 1.05, 3.3, 1.2, HEX.lt2, 'stat card 1');
-stat(s, 6.4, 1.1, 2.9, '59만 곳', '매월 공개되는 가입 사업장', C.accent2, 'stat 1', 30);
-card(s, 6.2, 2.4, 3.3, 1.2, HEX.lt2, 'stat card 2');
-stat(s, 6.4, 2.45, 2.9, '0.40%', '3개월 안에 탈퇴하는 비율', C.accent1, 'stat 2', 30);
-card(s, 0.5, 3.85, 9.0, 1.2, HEX.dk2, 'related card');
-s.addText([
-  { text: '기존 폐업 예측 연구  ', options: { bold: true, color: HEX.accent3, fontSize: 13 } },
-  { text: '전자결제 이용 사업자(2023) · 소상공인 도소매 설문(2023) · 서울 치킨집(2018) — 특정 업종·플랫폼·1회성 자료', options: { color: HEX.lt1, fontSize: 12, breakLine: true } },
-  { text: '본 연구  ', options: { bold: true, color: HEX.accent4, fontSize: 13 } },
-  { text: '누구나 받을 수 있는 월별 공개 데이터로 전 업종·전국을 다루고, 인원·급여 흐름 변수를 만듦', options: { color: HEX.lt1, fontSize: 12 } },
-], { x: 0.75, y: 3.9, w: 8.5, h: 1.1, valign: 'middle', margin: 0, paraSpaceAfter: 4, isTextBox: true, objectName: 'related text' });
-s.addNotes('폐업 위험은 보통 재무제표로 판단하지만 갱신이 느리고 소규모 사업장은 공개되지도 않습니다. 반면 국민연금 사업장 데이터는 59만 곳의 인원과 급여 흐름을 매달 공개합니다. 기존 연구는 특정 업종이나 플랫폼에 한정됐는데, 저는 공개 데이터로 전 업종·전국을 다뤘고 이 데이터로 탈퇴를 예측한 연구는 찾지 못했습니다.');
+// 1. 표지 -------------------------------------------------------------------
+pres.addSection({ title: '왜' });
+let s = pres.addSlide({ masterName: 'TITLE_DARK', sectionTitle: '왜' });
+s.addText('회사가 문 닫기 전에,\n미리 알 수 있을까?', { placeholder: 'title' });
+s.addText('국민연금 가입 사업장 데이터로 본 사업장 탈퇴 3개월 조기 예측\n데이터분석 기말 프로젝트 · 202444085 김철중', { placeholder: 'body' });
+s.addNotes('안녕하세요, 김철중입니다. 제 주제는 "회사가 문 닫기 전에 미리 알 수 있을까"입니다. 국민연금 공개 데이터로 3개월 안에 문을 닫거나 국민연금에서 빠질 회사를 미리 찾아보았습니다.');
 
-// 3. Data -------------------------------------------------------------------
-pres.addSection({ title: '데이터' });
-s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '데이터' });
-s.addText('월별 파일을 사업장 단위로 연결해 정답을 만든다', { placeholder: 'title' });
-const steps = [['2026-03', 'T-4'], ['2026-04', 'T-3'], ['2026-06', 'T-1'], ['2026-07', '기준월 T'], ['2026-10', 'T+3 정답']];
-steps.forEach((st, i) => {
-  const x = 0.5 + i * 1.85;
-  const isT = i === 3, isY = i === 4;
-  const fill = isT ? HEX.dk2 : isY ? HEX.accent1 : HEX.lt2;
-  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y: 1.05, w: 1.6, h: 0.85, rectRadius: 0.08, fill: { color: fill }, line: { color: fill }, objectName: 'month box ' + (i + 1) });
-  s.addText([{ text: st[0], options: { bold: true, fontSize: 14, breakLine: true } }, { text: st[1], options: { fontSize: 11 } }],
-    { x, y: 1.05, w: 1.6, h: 0.85, align: 'center', valign: 'middle', margin: 0, color: (isT || isY) ? HEX.lt1 : HEX.dk2, isTextBox: true, objectName: 'month text ' + (i + 1) });
-  if (i < 4) s.addShape(pres.shapes.RIGHT_ARROW, { x: x + 1.63, y: 1.36, w: 0.2, h: 0.24, fill: { color: HEX.accent5 }, line: { color: HEX.accent5 }, objectName: 'arrow ' + (i + 1) });
+// 2. 왜 필요한가 ------------------------------------------------------------
+s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '왜' });
+s.addText('회사가 문을 닫으면, 피해는 직원에게 먼저 온다', { placeholder: 'title' });
+const why = [
+  ['97.6만 명', '2025년 폐업한 사업자\n하루 약 2,700곳', C.text2],
+  ['2조 679억 원', '2025년 밀린 월급\n(임금체불액, 역대 최대)', C.accent1],
+  ['26.2만 명', '2025년 월급을\n제때 못 받은 노동자', C.accent2],
+];
+why.forEach((w, i) => {
+  const x = 0.5 + i * 3.05;
+  card(s, x, 1.05, 2.85, 1.9, HEX.lt2, 'why card ' + (i + 1));
+  stat(s, x + 0.2, 1.2, 2.5, w[0], w[1], w[2], 'why stat ' + (i + 1), 26);
 });
-bullets(s, [
-  '연결 키: 사업자번호 6자리 + 사업장명 + 법정동·업종코드',
-  '정답: 기준월에 "등록"인 사업장이 3개월 뒤 "탈퇴"로 바뀌면 1',
-  '3개월 뒤 파일에서 사라진 40,135곳은 제외 (민감도 분석으로 따로 확인)',
-  '파생변수 17개: 업력, 1인당 고지금액, 상실·취득률, 인원 증감률, 신규진입 등',
-], { x: 0.5, y: 2.15, w: 6.0, h: 2.9, fontSize: 13 });
-card(s, 6.8, 2.15, 2.7, 2.9, HEX.lt2, 'count card');
-stat(s, 7.0, 2.3, 2.4, '513,541', '분석 대상 사업장', C.text2, 'count total', 32);
-stat(s, 7.0, 3.5, 2.4, '2,033', '3개월 내 탈퇴 (0.40%)', C.accent1, 'count exit', 32);
-s.addNotes('사업장 고유번호가 없어서 사업자번호 앞자리, 이름, 주소·업종 코드를 묶어 같은 사업장을 연결했습니다. 2026년 7월에 등록 상태인 사업장이 10월에 탈퇴로 바뀌었으면 1로 정의했고, 과거 시점을 붙여 인원 증감률 같은 변수 17개를 만들었습니다. 51만 곳 중 2,033곳, 0.4%가 탈퇴했습니다.');
-
-// 4. EDA --------------------------------------------------------------------
-pres.addSection({ title: 'EDA' });
-s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: 'EDA' });
-s.addText('작고 젊은 사업장, 그리고 건설 현장이 위험하다', { placeholder: 'title' });
-s.addImage({ path: FIG('02_size_age_rate.png'), x: 0.5, y: 1.0, w: 5.9, h: 1.93, objectName: 'size age chart', altText: '가입자 규모별, 업력별 3개월 내 탈퇴율 그래프' });
-bullets(s, [
-  '1~4명 0.62% · 100명+ 0.04%',
-  '업력 1년 미만 2.98% · 20년+ 0.05%',
-  '가입자 0명 사업장 77% 탈퇴',
-], { x: 6.6, y: 1.05, w: 2.9, h: 1.9, fontSize: 12 });
-card(s, 0.5, 3.15, 4.4, 1.9, HEX.lt2, 'accuracy trap card');
+card(s, 0.5, 3.15, 9.0, 1.6, HEX.dk2, 'why message card');
 s.addText([
-  { text: '정확도의 함정', options: { bold: true, color: HEX.accent1, fontSize: 15, breakLine: true } },
-  { text: '전부 "유지"라고 찍어도 정확도 99.6% → Precision·Recall·F1·PR-AUC로 평가 (1주차 FDS 예시)', options: { color: HEX.dk1, fontSize: 13 } },
-], { x: 0.7, y: 3.25, w: 4.0, h: 1.7, valign: 'middle', margin: 0, paraSpaceAfter: 6, isTextBox: true, objectName: 'accuracy trap text' });
-card(s, 5.1, 3.15, 4.4, 1.9, HEX.lt2, 'construction card');
+  { text: '터진 다음에 수습하면 늦다', options: { bold: true, fontSize: 16, color: HEX.accent4, breakLine: true } },
+  { text: '정부가 밀린 월급을 대신 준 돈(대지급금) 6,845억 원 중 회사로부터 돌려받은 건 26%뿐. 위험한 회사를 미리 알면 점검·상담으로 피해를 줄일 수 있다.', options: { fontSize: 14, color: HEX.lt1 } },
+], { x: 0.75, y: 3.2, w: 8.5, h: 1.5, valign: 'middle', margin: 0, paraSpaceAfter: 6, isTextBox: true, objectName: 'why message' });
+sourceNote(s, '출처: 국세청 국세통계(연합뉴스 2026.7.6 보도), 고용노동부 임금체불 현황(경향신문 2026.2.20 보도)');
+s.addNotes('왜 이 연구가 필요한지부터 말씀드리겠습니다. 작년에만 97만 명, 하루에 2,700곳 정도가 문을 닫았습니다. 회사가 어려워지면 가장 먼저 피해를 보는 건 직원입니다. 작년에 밀린 월급이 2조 원이 넘고, 26만 명이 월급을 제때 못 받았습니다. 정부가 대신 준 돈도 4분의 1만 돌려받았습니다. 그래서 터진 뒤에 수습하는 것보다, 위험한 회사를 미리 알아서 점검하고 상담하는 게 중요하다고 생각했습니다.');
+
+// 3. 그런데 미리 알기 어렵다 -------------------------------------------------
+s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '왜' });
+s.addText('그런데 지금은 미리 알기가 어렵다', { placeholder: 'title' });
+card(s, 0.5, 1.05, 4.4, 2.0, HEX.lt2, 'old way card');
 s.addText([
-  { text: '건설·공사업 13.9% → 49.0%', options: { bold: true, color: HEX.accent1, fontSize: 15, breakLine: true } },
-  { text: '전체 사업장 중 비중 → 탈퇴 중 비중. 현장마다 등록했다가 공사가 끝나면 탈퇴 → "탈퇴"는 폐업 + 현장 종료 + 휴업', options: { color: HEX.dk1, fontSize: 13 } },
-], { x: 5.3, y: 3.25, w: 4.0, h: 1.7, valign: 'middle', margin: 0, paraSpaceAfter: 6, isTextBox: true, objectName: 'construction text' });
-s.addNotes('규모가 작을수록, 업력이 짧을수록 탈퇴율이 뚜렷하게 높았습니다. 탈퇴가 0.4%뿐이라 전부 유지라고 찍어도 정확도가 99.6%라서, 정확도 대신 Precision, Recall, F1, PR-AUC로 평가했습니다. 또 탈퇴의 절반이 건설·공사업이었는데, 공사 현장마다 사업장을 등록하기 때문입니다. 그래서 여기서 탈퇴는 폐업만이 아니라 현장 종료도 포함합니다.');
+  { text: '지금까지: 재무제표', options: { bold: true, fontSize: 16, color: HEX.accent5, breakLine: true } },
+  { text: '1년에 한 번 나온다 → 알았을 땐 이미 늦음', options: { fontSize: 14, color: HEX.dk1, breakLine: true } },
+  { text: '작은 회사는 아예 공개하지 않는다', options: { fontSize: 14, color: HEX.dk1 } },
+], { x: 0.7, y: 1.15, w: 4.0, h: 2.1, valign: 'top', margin: 0, paraSpaceAfter: 8, isTextBox: true, objectName: 'old way text' });
+card(s, 5.1, 1.05, 4.4, 2.0, HEX.lt2, 'new way card');
+s.addText([
+  { text: '이 프로젝트: 국민연금 데이터', options: { bold: true, fontSize: 16, color: HEX.accent2, breakLine: true } },
+  { text: '매달 공개, 전국 59만 개 회사', options: { fontSize: 14, color: HEX.dk1, breakLine: true } },
+  { text: '직원 수·월급 총액·입사자·퇴사자', options: { fontSize: 14, color: HEX.dk1, breakLine: true } },
+  { text: '→ 회사의 "월간 건강검진표"', options: { fontSize: 14, bold: true, color: HEX.accent2 } },
+], { x: 5.3, y: 1.15, w: 4.0, h: 2.1, valign: 'top', margin: 0, paraSpaceAfter: 8, isTextBox: true, objectName: 'new way text' });
+card(s, 0.5, 3.3, 9.0, 1.3, HEX.accent1, 'question card');
+s.addText('질문: 이 건강검진표만 보고, 3개월 안에 문 닫을 회사를 미리 골라낼 수 있을까?',
+  { x: 0.75, y: 3.35, w: 8.5, h: 1.2, fontSize: 17, bold: true, color: HEX.lt1, valign: 'middle', margin: 0, isTextBox: true, objectName: 'question text' });
+s.addNotes('그런데 지금은 미리 알기가 어렵습니다. 보통 재무제표를 보는데, 1년에 한 번 나오고 작은 회사는 공개도 안 합니다. 반면 국민연금 데이터는 59만 개 회사의 직원 수, 월급 총액, 입사자와 퇴사자 수를 매달 공개합니다. 회사의 월간 건강검진표인 셈이죠. 그래서 이 건강검진표만으로 3개월 안에 문 닫을 회사를 골라낼 수 있는지 확인해 봤습니다. 이런 방식의 연구는 찾지 못했습니다.');
 
-// 5. Model compare --------------------------------------------------------
-pres.addSection({ title: '모델링' });
-s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '모델링' });
-s.addText('7개 알고리즘 비교 — 앙상블이 우세', { placeholder: 'title' });
-s.addChart(pres.charts.BAR, [{ name: 'PR-AUC', labels: N.models, values: N.model_prauc }], Object.assign({
-  x: 0.5, y: 1.0, w: 5.8, h: 4.05, barDir: 'bar', chartColors: [HEX.accent2], showValue: true, dataLabelPosition: 'outEnd',
-  dataLabelFormatCode: '0.000', valAxisHidden: true, showLegend: false, showTitle: true, title: 'PR-AUC (층화 5-겹 교차검증 평균)', titleFontSize: 12, titleColor: HEX.dk2,
-  valAxisMaxVal: 0.22, objectName: 'model prauc chart',
+// 4. 어떻게 했나 -------------------------------------------------------------
+pres.addSection({ title: '어떻게' });
+s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '어떻게' });
+s.addText('어떻게 했나: 회사마다 "위험 점수"를 매긴다', { placeholder: 'title' });
+const flow = [
+  ['1', '매달 파일 연결', '5개월치 파일을\n같은 회사끼리 연결'],
+  ['2', '특징 17개 만들기', '회사 나이, 직원 수,\n입·퇴사, 월급 총액 변화'],
+  ['3', '정답 붙이기', '3개월 뒤 국민연금에서\n빠졌는지(탈퇴) 확인'],
+  ['4', '위험 점수 학습', '머신러닝이 패턴을 배워\n회사별 점수 계산'],
+];
+flow.forEach((f, i) => {
+  const x = 0.5 + i * 2.3;
+  card(s, x, 1.05, 2.1, 2.45, i === 3 ? HEX.dk2 : HEX.lt2, 'flow card ' + (i + 1));
+  s.addText([
+    { text: f[0], options: { bold: true, fontSize: 26, color: i === 3 ? HEX.accent4 : HEX.accent1, breakLine: true } },
+    { text: f[1], options: { bold: true, fontSize: 15, color: i === 3 ? HEX.lt1 : HEX.dk2, breakLine: true } },
+    { text: f[2], options: { fontSize: 12, color: i === 3 ? HEX.accent3 : HEX.dk1 } },
+  ], { x: x + 0.15, y: 1.15, w: 1.8, h: 2.25, valign: 'top', margin: 0, paraSpaceAfter: 6, isTextBox: true, objectName: 'flow text ' + (i + 1) });
+  if (i < 3) s.addShape(pres.shapes.RIGHT_ARROW, { x: x + 2.12, y: 2.15, w: 0.16, h: 0.24, fill: { color: HEX.accent5 }, line: { color: HEX.accent5 }, objectName: 'flow arrow ' + (i + 1) });
+});
+card(s, 0.5, 3.7, 9.0, 1.15, HEX.lt2, 'data size card');
+s.addText([
+  { text: '513,541곳', options: { bold: true, fontSize: 22, color: HEX.dk2 } },
+  { text: '  을 분석했고, 그중 3개월 안에 탈퇴한 곳은  ', options: { fontSize: 15, color: HEX.dk1 } },
+  { text: '2,033곳 (0.4%)', options: { bold: true, fontSize: 22, color: HEX.accent1 } },
+], { x: 0.75, y: 3.75, w: 8.5, h: 1.05, valign: 'middle', margin: 0, isTextBox: true, objectName: 'data size text' });
+s.addNotes('방법은 네 단계입니다. 매달 나오는 파일 다섯 개를 같은 회사끼리 이어 붙이고, 회사 나이, 직원 수, 입사·퇴사, 월급 총액 변화 같은 특징을 만들었습니다. 그리고 3개월 뒤에 국민연금에서 빠졌는지를 정답으로 붙여서, 머신러닝이 회사마다 위험 점수를 매기도록 학습시켰습니다. 51만 곳 중 3개월 안에 빠진 곳은 2,033곳, 0.4%였습니다.');
+
+// 5. 데이터에서 본 것 --------------------------------------------------------
+s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '어떻게' });
+s.addText('데이터를 보니: 작고, 새로 생긴 회사가 위험했다', { placeholder: 'title' });
+s.addImage({ path: FIG('02_size_age_rate.png'), x: 0.5, y: 1.0, w: 5.9, h: 1.93, objectName: 'size age chart', altText: '직원 수별, 회사 나이별 3개월 내 탈퇴율 그래프' });
+s.addText('왼쪽: 직원 수별 탈퇴율 · 오른쪽: 회사 나이별 탈퇴율', { x: 0.5, y: 2.95, w: 5.9, h: 0.25, fontSize: 10, color: C.accent5, margin: 0, isTextBox: true, objectName: 'chart caption' });
+const finds = [
+  ['직원 1~4명', '100명 이상 회사보다\n탈퇴율 약 16배'],
+  ['생긴 지 1년 미만', '20년 넘은 회사보다\n탈퇴율 약 60배'],
+];
+finds.forEach((f, i) => {
+  const y = 1.0 + i * 1.12;
+  card(s, 6.6, y, 2.9, 1.0, HEX.lt2, 'find card ' + (i + 1));
+  s.addText([{ text: f[0], options: { bold: true, fontSize: 14, color: HEX.accent1, breakLine: true } }, { text: f[1], options: { fontSize: 12, color: HEX.dk1 } }],
+    { x: 6.75, y: y + 0.05, w: 2.65, h: 0.9, valign: 'middle', margin: 0, isTextBox: true, objectName: 'find text ' + (i + 1) });
+});
+card(s, 0.5, 3.35, 9.0, 1.5, HEX.lt2, 'construction card');
+s.addText([
+  { text: '탈퇴한 곳의 절반(49%)은 건설·공사 현장', options: { bold: true, fontSize: 15, color: HEX.accent1, breakLine: true } },
+  { text: '건설사는 공사 현장마다 사업장을 따로 등록했다가 공사가 끝나면 탈퇴한다. 그래서 여기서 "탈퇴"는 폐업만이 아니라 공사 종료·휴업도 포함한다는 점에 주의했다.', options: { fontSize: 13, color: HEX.dk1 } },
+], { x: 0.75, y: 3.4, w: 8.5, h: 1.4, valign: 'middle', margin: 0, paraSpaceAfter: 6, isTextBox: true, objectName: 'construction text' });
+s.addNotes('데이터를 먼저 살펴봤더니, 직원이 1~4명인 작은 회사는 100명 이상 회사보다 탈퇴율이 16배, 생긴 지 1년이 안 된 회사는 20년 넘은 회사보다 60배 높았습니다. 그리고 탈퇴한 곳의 절반이 건설 현장이었는데, 공사가 끝나면 현장 사업장을 정리하기 때문입니다. 그래서 여기서 말하는 탈퇴에는 폐업뿐 아니라 공사 종료도 들어 있다는 점을 염두에 뒀습니다.');
+
+// 6. 어려웠던 점 -------------------------------------------------------------
+s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '어떻게' });
+s.addText('어려웠던 점: 1,000곳 중 4곳을 찾는 문제', { placeholder: 'title' });
+card(s, 0.5, 1.05, 4.4, 1.75, HEX.lt2, 'trap card');
+s.addText([
+  { text: '"다 괜찮다"고만 해도 정답률 99.6%', options: { bold: true, fontSize: 15, color: HEX.accent1, breakLine: true } },
+  { text: '그래서 정답률 대신 "문 닫을 회사를 몇 곳 찾았나"로 평가했다', options: { fontSize: 13, color: HEX.dk1 } },
+], { x: 0.7, y: 1.1, w: 4.0, h: 1.65, valign: 'middle', margin: 0, paraSpaceAfter: 6, isTextBox: true, objectName: 'trap text' });
+card(s, 0.5, 2.95, 4.4, 1.9, HEX.lt2, 'fismote card');
+s.addText([
+  { text: '해결: 예시를 늘려서 학습 (FI-SMOTE)', options: { bold: true, fontSize: 15, color: HEX.accent2, breakLine: true } },
+  { text: '탈퇴한 회사 예시가 너무 적어서, 진짜와 비슷한 가상 예시를 만들어 학습시켰다. 중요한 특징은 그대로, 나머지는 다양하게 — 1학기에 직접 만든 방법', options: { fontSize: 13, color: HEX.dk1 } },
+], { x: 0.7, y: 3.0, w: 4.0, h: 1.8, valign: 'middle', margin: 0, paraSpaceAfter: 6, isTextBox: true, objectName: 'fismote text' });
+s.addChart(pres.charts.BAR, [{ name: 'F1', labels: N.samplers.map((x) => SAMPLER_PLAIN[x]), values: N.cv5_f1 }], Object.assign({
+  x: 5.1, y: 1.0, w: 4.4, h: 3.85, barDir: 'col', chartColors: [HEX.accent3, HEX.accent3, HEX.accent3, HEX.accent1],
+  showValue: true, dataLabelPosition: 'outEnd', dataLabelFormatCode: '0.00', valAxisHidden: true, valAxisMaxVal: 0.25, showLegend: false,
+  showTitle: true, title: '탈퇴 회사를 맞힌 정도 (F1, 5번 반복 평균)', titleFontSize: 12, titleColor: HEX.dk2, objectName: 'sampler f1 chart',
 }, axis));
-bullets(s, [
-  '정확도는 모두 99.6% 근처라 비교 불가',
-  'PR-AUC는 Voting·RandomForest 최고, 무작위의 약 45배',
-  '임계값 0.5에서는 Recall 대부분 10% 미만 → 다수결 편향',
-], { x: 6.5, y: 1.1, w: 3.0, h: 3.9, fontSize: 13 });
-s.addNotes('교안의 분류 알고리즘 7개를 층화 5-겹 교차검증으로 비교했습니다. 정확도는 모두 99.6%로 같아서 PR-AUC로 비교했고, Voting과 랜덤포레스트가 가장 좋았습니다. 하지만 임계값 0.5에서는 탈퇴를 거의 못 잡아서 불균형 처리를 적용했습니다.');
+s.addNotes(`어려웠던 점은 탈퇴하는 회사가 1,000곳 중 4곳밖에 안 된다는 겁니다. 그래서 "다 괜찮다"고만 말해도 정답률이 99.6%가 나옵니다. 그래서 정답률 대신 문 닫을 회사를 몇 곳이나 찾았는지로 평가했습니다. 또 탈퇴 예시가 너무 적어서, 제가 1학기에 만든 FI-SMOTE로 진짜와 비슷한 가상 예시를 만들어 학습시켰습니다. 다섯 번 반복해서 비교했는데, 다른 방법들보다 매번 더 잘 찾았습니다. 알고리즘은 교안에서 배운 7개를 비교해서 랜덤포레스트를 골랐습니다.`);
 
-// 6. Imbalance (5-fold) ----------------------------------------------------
-s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '모델링' });
-s.addText('불균형 처리: FI-SMOTE가 F1·MCC를 가장 높였다', { placeholder: 'title' });
-s.addChart(pres.charts.BAR, [
-  { name: 'F1', labels: N.samplers, values: N.cv5_f1 },
-  { name: 'MCC', labels: N.samplers, values: N.cv5_mcc },
-], Object.assign({
-  x: 0.5, y: 1.0, w: 5.8, h: 4.05, barDir: 'col', barGrouping: 'clustered', chartColors: [HEX.accent1, HEX.dk2],
-  showValue: true, dataLabelPosition: 'outEnd', dataLabelFormatCode: '0.000', valAxisHidden: true,
-  showLegend: true, legendPos: 'b', showTitle: true, title: 'RandomForest, 층화 5-겹 반복 평균 (임계값 0.5)', titleFontSize: 12, titleColor: HEX.dk2,
-  objectName: 'imbalance cv5 chart',
-}, axis));
-bullets(s, [
-  'FI-SMOTE: 본인이 1학기에 제안한 기법 — 중요 변수는 원본 근처, 나머지는 자유롭게 보간',
-  `5-겹 평균 F1 ${N.cv5_f1[fi].toFixed(3)} (±${N.cv5_f1_std[fi].toFixed(3)}) — 5번 모두 SMOTE·ADASYN보다 F1·MCC·PR-AUC 높음`,
-  `순위 지표 PR-AUC는 오버샘플링 없음(${N.cv5_prauc[0].toFixed(3)})이 더 높음 → 효과는 놓치던 탈퇴를 더 잡는 것`,
-], { x: 6.5, y: 1.1, w: 3.0, h: 3.9, fontSize: 12 });
-s.addNotes(`불균형 처리로 SMOTE, ADASYN, 제가 1학기에 제안한 FI-SMOTE를 비교했습니다. 한 번의 분할만으로는 우연일 수 있어서 5-겹으로 다섯 번 반복했습니다. FI-SMOTE는 F1과 MCC 평균이 가장 높았고, 다섯 번 중 ${winF1}번 SMOTE보다 F1이 높았습니다. 다만 순위 지표인 PR-AUC는 오버샘플링을 안 한 경우와 비슷해서, 효과는 임계값에서 놓치던 탈퇴를 더 잡아내는 데 있다고 봤습니다.`);
-
-// 7. Final result ---------------------------------------------------------
+// 7. 결과 ---------------------------------------------------------------------
 pres.addSection({ title: '결과' });
 s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '결과' });
-s.addText(`상위 5%만 점검해도 탈퇴 사업장의 ${Math.round(N.final['Recall@상위5%'] * 100)}%를 찾는다`, { placeholder: 'title' });
+s.addText(`결과: 상위 5%만 봐도 문 닫을 회사의 ${top5}%를 찾는다`, { placeholder: 'title' });
 const pctLabels = N.cap_pcts.map((p) => p + '%');
 s.addChart(pres.charts.LINE, [
-  { name: '모델 위험 점수 순', labels: pctLabels, values: N.cap_random },
-  { name: '무작위 점검', labels: pctLabels, values: N.cap_pcts },
+  { name: '위험 점수 높은 순으로 살펴볼 때', labels: pctLabels, values: N.cap_random },
+  { name: '아무렇게나 골라 살펴볼 때', labels: pctLabels, values: N.cap_pcts },
 ], Object.assign({
-  x: 0.5, y: 1.0, w: 5.8, h: 4.05, chartColors: [HEX.accent1, 'A0A8B3'], lineSize: 2.5, lineDataSymbol: 'circle', lineDataSymbolSize: 7,
+  x: 0.5, y: 1.0, w: 5.8, h: 3.85, chartColors: [HEX.accent1, 'A0A8B3'], lineSize: 2.5, lineDataSymbol: 'circle', lineDataSymbolSize: 7,
   showValue: true, dataLabelPosition: 't', dataLabelFormatCode: '0"%"', valAxisMaxVal: 100, valAxisLabelFormatCode: '0"%"',
-  showLegend: true, legendPos: 'b', showTitle: true, title: '점검 대상(위험 점수 상위 %)별 탈퇴 사업장 포착률', titleFontSize: 12, titleColor: HEX.dk2,
+  showLegend: true, legendPos: 'b', showTitle: true, title: '살펴본 회사 비율(가로) vs 찾아낸 탈퇴 회사 비율(세로)', titleFontSize: 12, titleColor: HEX.dk2,
   objectName: 'capture chart',
 }, axis));
-card(s, 6.5, 1.05, 3.0, 1.3, HEX.lt2, 'final stat card 1');
-stat(s, 6.7, 1.15, 2.6, Math.round(N.cap_random[0]) + '배', '상위 1% 점검 시 무작위 대비 효율', C.accent1, 'lift stat');
-card(s, 6.5, 2.5, 3.0, 2.55, HEX.lt2, 'final metrics card');
+card(s, 6.5, 1.05, 3.0, 3.8, HEX.lt2, 'result card');
 s.addText([
-  { text: '최종 모델', options: { bold: true, fontSize: 13, color: HEX.dk2, breakLine: true } },
-  { text: 'RandomForest (GridSearchCV) + FI-SMOTE', options: { fontSize: 11, color: HEX.accent5, breakLine: true } },
-  { text: `F1 ${N.final.F1.toFixed(3)} · MCC ${N.final.MCC.toFixed(3)}`, options: { fontSize: 13, color: HEX.dk1, breakLine: true } },
-  { text: `ROC-AUC ${N.final['ROC-AUC'].toFixed(3)} · PR-AUC ${N.final['PR-AUC'].toFixed(3)}`, options: { fontSize: 13, color: HEX.dk1, breakLine: true } },
-  { text: '테스트셋 102,709곳 (탈퇴 407곳)', options: { fontSize: 11, color: HEX.accent5 } },
-], { x: 6.7, y: 2.6, w: 2.7, h: 2.35, valign: 'top', margin: 0, paraSpaceAfter: 5, isTextBox: true, objectName: 'final metrics text' });
-s.addNotes(`튜닝한 랜덤포레스트에 FI-SMOTE를 적용한 최종 모델은 테스트셋에서 F1 ${N.final.F1.toFixed(2)}, ROC-AUC ${N.final['ROC-AUC'].toFixed(2)}였습니다. 개별 사업장을 정확히 맞히기는 어렵지만, 위험 점수 순으로 줄을 세우면 상위 1%만 점검해도 탈퇴 사업장의 ${Math.round(N.cap_random[0])}%를 찾습니다. 무작위보다 ${Math.round(N.cap_random[0])}배 효율적입니다.`);
+  { text: '100곳 중 5곳만 살펴보면', options: { fontSize: 14, color: HEX.dk1, breakLine: true } },
+  { text: `${top5}%`, options: { bold: true, fontSize: 40, color: HEX.accent1, breakLine: true } },
+  { text: '문 닫을 회사를 찾아낸다', options: { fontSize: 14, color: HEX.dk1, breakLine: true } },
+  { text: ' ', options: { fontSize: 8, breakLine: true } },
+  { text: `아무렇게나 고르면 5% → ${Math.round(top5 / 5)}배`, options: { bold: true, fontSize: 13, color: HEX.accent2 } },
+], { x: 6.7, y: 1.15, w: 2.6, h: 3.6, valign: 'middle', margin: 0, isTextBox: true, objectName: 'result text' });
+s.addNotes(`결과입니다. 모든 회사를 위험 점수 순으로 줄 세운 다음 위에서부터 살펴본다고 해 보겠습니다. 전체의 5%만 살펴봐도 실제로 문 닫을 회사의 ${top5}%를 찾아냅니다. 아무렇게나 5%를 고르면 5%밖에 못 찾으니까 약 ${Math.round(top5 / 5)}배 효율적입니다. 한 곳 한 곳을 확정하기는 어렵지만, 어디부터 살펴볼지 순서를 정하는 데는 충분히 쓸 수 있습니다.`);
 
-// 8. Robustness ------------------------------------------------------------
+// 8. 믿을 만한가 ------------------------------------------------------------
 s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '결과' });
-s.addText('과거로 학습해도, 건설업을 빼도 통하는가', { placeholder: 'title' });
-s.addChart(pres.charts.LINE, [
-  { name: '무작위 분할 (7월 안에서 8:2)', labels: pctLabels, values: N.cap_random },
-  { name: '시간 기반 (4월 학습 → 7월 평가)', labels: pctLabels, values: N.cap_time },
-], Object.assign({
-  x: 0.5, y: 1.0, w: 5.8, h: 4.05, chartColors: [HEX.accent1, HEX.accent2], lineSize: 2.5, lineDataSymbol: 'circle', lineDataSymbolSize: 7,
-  showValue: false, valAxisMaxVal: 100, valAxisLabelFormatCode: '0"%"',
-  showLegend: true, legendPos: 'b', showTitle: true, title: '탈퇴 사업장 포착률 비교 (점검 대상 상위 %)', titleFontSize: 12, titleColor: HEX.dk2,
-  objectName: 'robust capture chart',
-}, axis));
-const segNoCon = N.seg['건설업 제외'];
-const rows = [
-  ['시간 기반 검증', `상위 5% 포착 ${pct1(N.time['Recall@상위5%'])} · ROC-AUC ${N.time['ROC-AUC'].toFixed(3)}`],
-  ['건설업 제외', `상위 5% 포착 ${pct1(segNoCon['Recall@상위5%'])} · ROC-AUC ${segNoCon['ROC-AUC'].toFixed(3)}`],
-  ['사라진 곳도 탈퇴로', `탈퇴율 ${N.wide['탈퇴율(%)'].toFixed(1)}% · ROC-AUC ${N.wide['ROC-AUC'].toFixed(3)}`],
+s.addText('믿을 만한가: 세 가지로 다시 확인했다', { placeholder: 'title' });
+const checks = [
+  ['지난 분기로 배워서 이번 분기에 써도', `상위 5%로 ${top5Time}% 찾음`, '4월 데이터로 학습 → 7월 데이터로 평가 (실제로 쓰는 상황)'],
+  ['건설 현장을 빼고 봐도', `상위 5%로 ${top5NoCon}% 찾음`, '"건설이면 위험"만 외운 게 아니다'],
+  ['"사라진 회사"까지 탈퇴로 쳐도', '예측력 유지', `기준을 바꿔도 결론이 같다 (탈퇴율 ${N.wide['탈퇴율(%)'].toFixed(1)}%)`],
 ];
-rows.forEach((r, i) => {
-  const y = 1.05 + i * 1.35;
-  card(s, 6.5, y, 3.0, 1.2, HEX.lt2, 'robust card ' + (i + 1));
-  s.addText([{ text: r[0], options: { bold: true, fontSize: 13, color: HEX.accent2, breakLine: true } }, { text: r[1], options: { fontSize: 12, color: HEX.dk1 } }],
-    { x: 6.65, y: y + 0.08, w: 2.75, h: 1.05, valign: 'middle', margin: 0, paraSpaceAfter: 4, isTextBox: true, objectName: 'robust text ' + (i + 1) });
+checks.forEach((c, i) => {
+  const y = 1.05 + i * 1.28;
+  card(s, 0.5, y, 9.0, 1.12, HEX.lt2, 'check card ' + (i + 1));
+  s.addText(String(i + 1), { x: 0.7, y: y + 0.16, w: 0.8, h: 0.8, fontSize: 28, bold: true, color: HEX.accent2, align: 'center', valign: 'middle', margin: 0, isTextBox: true, objectName: 'check num ' + (i + 1) });
+  s.addText([{ text: c[0], options: { bold: true, fontSize: 15, color: HEX.dk2, breakLine: true } }, { text: c[2], options: { fontSize: 12, color: HEX.accent5 } }],
+    { x: 1.6, y: y + 0.08, w: 4.9, h: 0.96, valign: 'middle', margin: 0, isTextBox: true, objectName: 'check text ' + (i + 1) });
+  s.addText(c[1], { x: 6.6, y: y + 0.08, w: 2.75, h: 0.96, fontSize: 18, bold: true, color: HEX.accent1, align: 'right', valign: 'middle', margin: 0, isTextBox: true, objectName: 'check result ' + (i + 1) });
 });
-s.addNotes(`결과가 믿을 만한지 세 가지로 확인했습니다. 첫째, 4월 기준 데이터로 학습하고 7월 기준으로 평가하는 시간 기반 검증에서 상위 5% 포착률이 ${pct1(N.time['Recall@상위5%'])}였습니다. 둘째, 건설업을 빼고 평가해도 상위 5% 포착률이 ${pct1(segNoCon['Recall@상위5%'])}였습니다. 셋째, 파일에서 사라진 사업장까지 탈퇴로 봐도 ROC-AUC ${N.wide['ROC-AUC'].toFixed(2)}로 예측이 됐습니다.`);
+s.addNotes(`이 결과가 우연이 아닌지 세 가지로 다시 확인했습니다. 첫째, 실제로 쓸 때처럼 지난 분기 데이터로 배우고 이번 분기에 적용해도 상위 5%로 ${top5Time}%를 찾았습니다. 둘째, 건설 현장을 빼고 봐도 ${top5NoCon}%를 찾아서, 건설이면 위험하다는 것만 외운 게 아니었습니다. 셋째, 파일에서 사라진 회사까지 탈퇴로 쳐도 예측력이 유지됐습니다.`);
 
-// 9. Feature importance ---------------------------------------------------
+// 9. 신호 -----------------------------------------------------------------------
 s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '결과' });
-s.addText('무엇이 탈퇴를 알려주는가', { placeholder: 'title' });
-s.addChart(pres.charts.BAR, [{ name: '중요도', labels: N.fi_names, values: N.fi_values }], Object.assign({
-  x: 0.5, y: 1.0, w: 5.2, h: 4.05, barDir: 'bar', chartColors: [HEX.dk2], showValue: true, dataLabelPosition: 'outEnd',
-  dataLabelFormatCode: '0.000', valAxisHidden: true, valAxisMaxVal: 0.19, showLegend: false,
-  showTitle: true, title: '특성 중요도 상위 6개 (최종 모델)', titleFontSize: 12, titleColor: HEX.dk2, objectName: 'importance chart',
+s.addText('무엇이 위험 신호였나', { placeholder: 'title' });
+s.addChart(pres.charts.BAR, [{ name: '중요도', labels: N.fi_names.map((x) => PLAIN[x] || x), values: N.fi_values }], Object.assign({
+  x: 0.5, y: 1.0, w: 5.2, h: 3.85, barDir: 'bar', chartColors: [HEX.dk2], showValue: true, dataLabelPosition: 'outEnd',
+  dataLabelFormatCode: '0.00', valAxisHidden: true, valAxisMaxVal: 0.19, showLegend: false,
+  showTitle: true, title: '모델이 중요하게 본 특징 TOP 6', titleFontSize: 12, titleColor: HEX.dk2, objectName: 'importance chart',
 }, axis));
 const fx = [
-  ['신규진입', '최근 3개월 내 등록 → 탈퇴율 5배'],
-  ['업력', '하위 10% 2.26% vs 상위 10% 0.04%'],
-  ['가입자수', '작을수록 위험 (1~4명 0.62%)'],
-  ['취득률·고지금액 변화', '인원이 급히 들고 나거나 급여 총액이 줄면 이상 신호'],
+  ['최근에 새로 생긴 사업장', '기존 사업장보다 탈퇴율 5배 (공사 현장 등)'],
+  ['회사 나이가 어릴수록', '어린 10% 2.3% vs 오래된 10% 0.04%'],
+  ['직원이 적을수록', '1~4명 회사 탈퇴율 0.62%'],
+  ['인원 급변 · 월급 총액 감소', '갑자기 들고 나거나 월급이 줄면 이상 신호'],
 ];
 fx.forEach((f, i) => {
-  const y = 1.05 + i * 1.0;
-  card(s, 5.95, y, 3.55, 0.88, HEX.lt2, 'factor card ' + (i + 1));
-  s.addText([{ text: f[0], options: { bold: true, fontSize: 12, color: HEX.accent1, breakLine: true } }, { text: f[1], options: { fontSize: 11, color: HEX.dk1 } }],
-    { x: 6.1, y: y + 0.05, w: 3.3, h: 0.78, valign: 'middle', margin: 0, isTextBox: true, objectName: 'factor text ' + (i + 1) });
+  const y = 1.0 + i * 0.97;
+  card(s, 5.95, y, 3.55, 0.85, HEX.lt2, 'signal card ' + (i + 1));
+  s.addText([{ text: f[0], options: { bold: true, fontSize: 13, color: HEX.accent1, breakLine: true } }, { text: f[1], options: { fontSize: 11, color: HEX.dk1 } }],
+    { x: 6.1, y: y + 0.04, w: 3.3, h: 0.77, valign: 'middle', margin: 0, isTextBox: true, objectName: 'signal text ' + (i + 1) });
 });
-s.addNotes('가장 중요한 변수는 최근 신규 등록 여부, 업력, 가입자 수였습니다. 최근에 등록된 사업장, 업력이 짧은 사업장, 작은 사업장일수록 위험했고, 그다음으로 입퇴사 흐름과 급여 총액 변화가 중요했습니다.');
+s.addNotes('모델이 중요하게 본 신호는 최근에 새로 생겼는지, 회사 나이, 직원 수였습니다. 최근에 생긴 사업장은 탈퇴율이 5배였고, 회사 나이가 어릴수록, 직원이 적을수록 위험했습니다. 그다음으로 사람이 갑자기 많이 들고 나거나 월급 총액이 줄어드는 것이 이상 신호였습니다.');
 
-// 10. Conclusion ----------------------------------------------------------
+// 10. 결론 ---------------------------------------------------------------------
 pres.addSection({ title: '결론' });
 s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '결론' });
-s.addText('결론: "확정 판정"보다 "점검 우선순위" 도구', { placeholder: 'title' });
-card(s, 0.5, 1.0, 4.4, 3.35, HEX.lt2, 'action card');
-s.addText('실행 제언', { x: 0.7, y: 1.1, w: 4.0, h: 0.4, fontSize: 15, bold: true, color: C.accent1, margin: 0, isTextBox: true, objectName: 'action title' });
-bullets(s, [
-  '고용센터·지자체: 매월 위험 상위 1~5%를 고용지원·체불 예방 점검 대상으로',
-  '거래 기업·금융: 재무제표보다 빠른 거래처 위험 보조 지표',
-  '건설 현장은 별도 모델로 분리',
-], { x: 0.7, y: 1.6, w: 4.0, h: 2.7, fontSize: 15 });
-card(s, 5.1, 1.0, 4.4, 3.35, HEX.lt2, 'limit card');
-s.addText('한계와 다음 단계', { x: 5.3, y: 1.1, w: 4.0, h: 0.4, fontSize: 15, bold: true, color: C.accent2, margin: 0, isTextBox: true, objectName: 'limit title' });
-bullets(s, [
-  '"탈퇴"에 폐업·현장 종료·휴업이 섞여 있음',
-  '고지금액 상한, 6자리 사업자번호로 인한 연결 오류 가능',
-  '여러 기준월을 쌓아 계절성 반영, 국세청 휴·폐업 정보와 결합',
-], { x: 5.3, y: 1.6, w: 4.0, h: 2.7, fontSize: 15 });
+s.addText('이렇게 쓸 수 있다', { placeholder: 'title' });
+const uses = [
+  ['고용센터·지자체', '매달 위험 상위 회사부터 임금체불 예방 점검·상담'],
+  ['거래하는 회사·은행', '재무제표보다 먼저 거래처 위험 확인'],
+  ['창업 지원 기관', '생긴 지 얼마 안 된 작은 회사에 컨설팅 연결'],
+];
+uses.forEach((u, i) => {
+  const x = 0.5 + i * 3.05;
+  card(s, x, 1.0, 2.85, 1.45, HEX.lt2, 'use card ' + (i + 1));
+  s.addText([{ text: u[0], options: { bold: true, fontSize: 15, color: HEX.accent1, breakLine: true } }, { text: u[1], options: { fontSize: 13, color: HEX.dk1 } }],
+    { x: x + 0.2, y: 1.1, w: 2.45, h: 1.25, valign: 'top', margin: 0, paraSpaceAfter: 6, isTextBox: true, objectName: 'use text ' + (i + 1) });
+});
+card(s, 0.5, 2.65, 9.0, 1.55, HEX.dk2, 'limit card');
 s.addText([
-  { text: '소스코드 ', options: { bold: true, color: HEX.dk2 } },
-  { text: 'github.com/cholin3721/NPS-Workplace-Exit-Prediction', options: { color: HEX.accent2, breakLine: true } },
-  { text: '데이터 ', options: { bold: true, color: HEX.dk2 } },
-  { text: '공공데이터포털 「국민연금공단_국민연금 가입 사업장 내역」 · 생성형 AI(Claude) 활용 내역은 보고서 5장', options: { color: HEX.accent5 } },
-], { x: 0.5, y: 4.55, w: 9.0, h: 0.6, fontSize: 11, margin: 0, valign: 'middle', isTextBox: true, objectName: 'source text' });
-s.addNotes('정리하면, 공공데이터만으로 탈퇴 위험이 높은 사업장을 무작위보다 훨씬 효율적으로 골라낼 수 있었고, 과거 데이터로 학습해도 성능이 유지됐습니다. 개별 사업장을 확정하기보다는 점검 우선순위를 정하는 도구로 쓰는 게 적합합니다. 한계로는 탈퇴에 현장 종료가 섞여 있다는 점이 있어, 국세청 휴폐업 정보와 결합하는 것을 다음 과제로 남깁니다. 감사합니다.');
+  { text: '한계와 다음 단계', options: { bold: true, fontSize: 15, color: HEX.accent3, breakLine: true } },
+  { text: '"탈퇴"에는 폐업 말고도 공사 종료·휴업이 섞여 있다 → 국세청 휴·폐업 정보와 합치면 "진짜 폐업"만 볼 수 있다. 두 분기만 검증했으니 1년 이상으로 늘려 보고 싶다.', options: { fontSize: 13, color: HEX.lt1 } },
+], { x: 0.75, y: 2.7, w: 8.5, h: 1.45, valign: 'middle', margin: 0, paraSpaceAfter: 6, isTextBox: true, objectName: 'limit text' });
+s.addText([
+  { text: '코드·보고서 ', options: { bold: true, color: HEX.dk2 } },
+  { text: 'github.com/cholin3721/NPS-Workplace-Exit-Prediction', options: { color: HEX.accent2 } },
+  { text: '   데이터 ', options: { bold: true, color: HEX.dk2 } },
+  { text: '공공데이터포털 「국민연금 가입 사업장 내역」', options: { color: HEX.accent5 } },
+], { x: 0.5, y: 4.45, w: 9.0, h: 0.4, fontSize: 11, margin: 0, valign: 'middle', isTextBox: true, objectName: 'source text' });
+s.addNotes('이 모델은 회사를 확정 판정하는 도구가 아니라, 어디부터 살펴볼지 순서를 정하는 도구입니다. 고용센터는 위험한 회사부터 임금체불 예방 점검을 하고, 거래하는 회사나 은행은 재무제표보다 먼저 거래처 위험을 확인하고, 창업 지원 기관은 작은 신생 회사를 도울 수 있습니다. 한계는 탈퇴에 공사 종료나 휴업이 섞여 있다는 점이라, 국세청 휴폐업 정보와 합쳐 보는 것을 다음 과제로 남기겠습니다. 감사합니다.');
 
 (async () => {
   await pres.writeFile({ fileName: OUT });
