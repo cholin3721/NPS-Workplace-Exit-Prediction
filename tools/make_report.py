@@ -19,6 +19,14 @@ fin = pd.read_csv(os.path.join(RES, 'final_summary.csv'), encoding='utf-8-sig', 
 fin = pd.to_numeric(fin, errors='coerce')
 fi =pd.read_csv(os.path.join(RES, 'feature_importance.csv'), encoding='utf-8-sig', index_col=0).iloc[:, 0]
 th = pd.read_csv(os.path.join(RES, 'threshold_table.csv'), encoding='utf-8-sig')
+rep = pd.read_csv(os.path.join(RES, 'imbalance_cv5_folds.csv'), encoding='utf-8-sig')
+wins = pd.read_csv(os.path.join(RES, 'imbalance_cv5_wins.csv'), encoding='utf-8-sig', index_col=0)
+extra = pd.read_csv(os.path.join(RES, 'extra_validation.csv'), encoding='utf-8-sig', index_col=0)
+tcap = pd.read_csv(os.path.join(RES, 'time_validation_capture.csv'), encoding='utf-8-sig')
+tv = extra[extra['분석'] == '시간 기반 검증']
+seg = extra[extra['분석'] == '업종 분리'].set_index('세부')
+sens = extra[extra['분석'] == '민감도']
+wide_fi = pd.read_csv(os.path.join(RES, 'wide_definition_importance.csv'), encoding='utf-8-sig', index_col=0).iloc[:, 0]
 
 doc = Document()
 sec = doc.sections[0]
@@ -137,7 +145,7 @@ f4 = lambda x: f'{x:.4f}'
 # ───────────────────────── 표지/제목 ─────────────────────────
 P('데이터분석 기말대체 프로젝트 최종보고서', align=WD_ALIGN_PARAGRAPH.CENTER, size=10, color='7F7F7F', after=6)
 t = P('국민연금 가입 사업장 데이터를 활용한', align=WD_ALIGN_PARAGRAPH.CENTER, size=17, after=0); t.runs[0].bold = True
-t = P('사업장 탈퇴(폐업) 3개월 조기 예측', align=WD_ALIGN_PARAGRAPH.CENTER, size=17, after=4); t.runs[0].bold = True
+t = P('사업장 탈퇴 3개월 조기 예측', align=WD_ALIGN_PARAGRAPH.CENTER, size=17, after=4); t.runs[0].bold = True
 P('Early Prediction of Workplace Withdrawal within Three Months Using National Pension Workplace Data',
   align=WD_ALIGN_PARAGRAPH.CENTER, size=10, italic=True, color='404040', after=8)
 P('인하공업전문대학 컴퓨터정보공학과  202444085 김철중', align=WD_ALIGN_PARAGRAPH.CENTER, size=10.5, after=2)
@@ -150,10 +158,12 @@ abs_text = (
     f"7종의 분류 알고리즘을 층화 5-겹 교차검증으로 비교하고, SMOTE·ADASYN·FI-SMOTE 등 불균형 처리 기법을 비교한 결과, "
     f"GridSearchCV로 튜닝한 RandomForest에 FI-SMOTE를 결합한 모델이 테스트셋에서 F1 {fin['F1']:.3f}, MCC {fin['MCC']:.3f}, "
     f"ROC-AUC {fin['ROC-AUC']:.3f}를 기록하였다. 위험 점수 상위 5% 사업장만 점검해도 실제 탈퇴 사업장의 "
-    f"{fin['Recall@상위5%']*100:.1f}%를 찾아낼 수 있었으며, 최근 신규 등록 여부·업력·가입자 규모가 가장 중요한 요인이었다.")
+    f"{fin['Recall@상위5%']*100:.1f}%를 찾아낼 수 있었으며, 최근 신규 등록 여부·업력·가입자 규모가 가장 중요한 요인이었다. "
+    f"층화 5-겹 반복 검증에서 FI-SMOTE는 5번 모두 SMOTE·ADASYN보다 F1·MCC·PR-AUC가 높았고, 2026년 4월 기준으로 학습해 7월 기준으로 평가한 "
+    f"시간 기반 검증에서도 ROC-AUC {tv.iloc[1]['ROC-AUC']:.3f}, 상위 5% 포착률 {tv.iloc[1]['Recall@상위5%']*100:.1f}%로 성능이 유지되었다.")
 p = P(abs_text, bold_prefix='요 약  ', size=9.5, after=4)
 p.paragraph_format.left_indent = Cm(0.8); p.paragraph_format.right_indent = Cm(0.8)
-p = P('사업장 폐업 예측, 국민연금, 공공데이터, 클래스 불균형, FI-SMOTE, 랜덤포레스트', bold_prefix='Keyword  ', size=9.5, after=10)
+p = P('사업장 탈퇴 예측, 폐업 예측, 국민연금, 공공데이터, 클래스 불균형, FI-SMOTE, 랜덤포레스트', bold_prefix='Keyword  ', size=9.5, after=10)
 p.paragraph_format.left_indent = Cm(0.8)
 
 # ───────────────────────── 1. 서론 ─────────────────────────
@@ -191,7 +201,7 @@ H('2. 데이터 및 분석 방법 (Data & Methodology)')
 H('2.1 데이터 개요', 2)
 B('국민연금공단, 「국민연금공단_국민연금 가입 사업장 내역」, 공공데이터포털 파일데이터(CSV, 월간 갱신, 이용허락범위 제한 없음)', '출처: ')
 B('가입자 수 3인 이상 법인 사업장, 10인 이상 개인 사업장(2025년 7월 이후 기준)', '공개 범위: ')
-B('2026년 3·4·6·7·10월분 5개 파일 (각 약 59만 행 × 22열, 약 110MB)', '사용 파일: ')
+B('2026년 3·4·6·7·10월분 5개 파일 (각 약 59만 행 × 22열, 약 110MB) + 시간 기반 검증용 2025년 12월·2026년 1월분', '사용 파일: ')
 B('사업장명, 사업자번호(앞 6자리), 가입상태(1 등록/2 탈퇴), 주소·법정동코드, 법인/개인, 업종코드·업종명, '
   '적용일자, 재등록일자, 탈퇴일자, 가입자 수, 당월 고지금액, 신규취득자 수, 상실가입자 수', '주요 항목: ')
 
@@ -239,7 +249,9 @@ H('2.5 분석 기법 및 모델링', 2)
 B('탈퇴 비율을 유지하도록 학습 80% / 테스트 20%로 층화 분할 (테스트 102,709곳, 탈퇴 407곳)', '데이터 분할: ')
 B('로지스틱 회귀, 결정트리, 랜덤포레스트, AdaBoost, XGBoost, LightGBM, Soft Voting(RF+XGB+LGBM) — 학습셋에서 층화 추출한 15만 행으로 층화 5-겹 교차검증', '모델 비교(7·9·10주차): ')
 B('없음 / class_weight / SMOTE / ADASYN / FI-SMOTE — 오버샘플링은 학습셋에만 적용하고 소수 클래스를 다수 클래스의 10%까지 증식', '불균형 처리: ')
+B('학습셋을 층화 5-겹으로 나눠 RandomForest × {없음, SMOTE, ADASYN, FI-SMOTE}를 5번 반복하여 평균·표준편차·우위 횟수 비교', '반복 검증: ')
 B('랜덤포레스트 n_estimators·min_samples_leaf·max_features 12개 조합, PR-AUC 기준 3-겹 교차검증 GridSearchCV (9주차)', '튜닝: ')
+B('시간 기반 검증(4월 기준 학습 → 7월 기준 평가), 건설업 분리 평가, 정답 정의 민감도 분석', '추가 검증: ')
 B('Precision, Recall, F1, MCC, ROC-AUC, PR-AUC, 그리고 실무 관점의 "위험 점수 상위 k% 점검 시 포착률(Recall@k%)"', '평가지표: ')
 P('FI-SMOTE는 본인이 2026년 1학기에 제안한 오버샘플링 기법[7]이다. 랜덤포레스트의 특성 중요도로 중요 변수를 고른 뒤, '
   '중요 변수 공간에서 경계에 가까운 소수 샘플일수록 더 많이 합성하고(ADASYN 방식[5]), 중요 변수는 Beta(1, 1+scale×중요도) 분포의 작은 '
@@ -271,6 +283,20 @@ B('RandomForest + FI-SMOTE는 F1 0.223, MCC 0.224로 전체 10개 조합 중 1�
 B('다만 순위 지표인 PR-AUC 자체는 오버샘플링을 하지 않은 RandomForest(0.186)가 가장 높았다. 오버샘플링의 효과는 순위를 바꾸기보다 '
   '임계값 0.5에서 놓치던 탈퇴 사업장을 더 잡아내는 데(Recall 0.05 → 0.19) 있었다. 이는 FI-SMOTE 원 논문[7]에서 F1·MCC는 1위였지만 '
   'AUC는 SMOTE 계열과 비슷했던 결과와 같은 경향이다.')
+P('위 결과는 테스트셋 하나(탈퇴 407곳)에서 나온 것이므로 우연일 수 있다. 그래서 학습셋을 층화 5-겹으로 나눠 RandomForest로 5번 반복 비교하였다.')
+order = ['없음', 'SMOTE', 'ADASYN', 'FI-SMOTE']
+gm = rep.groupby('불균형처리')[['PR-AUC', 'F1', 'MCC', 'Recall', 'Recall@상위5%']]
+mn, sd = gm.mean().loc[order], gm.std().loc[order]
+r5 = pd.DataFrame({'불균형처리': order})
+for c in ['PR-AUC', 'F1', 'MCC', 'Recall', 'Recall@상위5%']:
+    r5[c] = [f'{m:.3f} ± {d:.3f}' for m, d in zip(mn[c], sd[c])]
+T(r5, '[표 5] 층화 5-겹 반복 비교 (RandomForest, 평균 ± 표준편차, 임계값 0.5)', widths=[2.6, 2.8, 2.8, 2.8, 2.8, 2.8], highlight_rows=(3,))
+F('08b_imbalance_cv5.png', '[그림 8] 5-겹 반복 비교: fold별 PR-AUC·F1·MCC 분포')
+w = lambda o, m: int(wins.loc[f'FI-SMOTE > {o}', m])
+B(f'FI-SMOTE는 5번 모두 SMOTE·ADASYN보다 PR-AUC, F1, MCC가 높았다 (SMOTE 대비 {w("SMOTE","PR-AUC")}/{w("SMOTE","F1")}/{w("SMOTE","MCC")}회, '
+  f'ADASYN 대비 {w("ADASYN","PR-AUC")}/{w("ADASYN","F1")}/{w("ADASYN","MCC")}회). 표준편차도 가장 작아 가장 안정적이었다.')
+B(f'오버샘플링 없음과 비교하면 F1은 {w("없음","F1")}/5회, MCC는 {w("없음","MCC")}/5회 높았지만 PR-AUC는 {w("없음","PR-AUC")}/5회로 낮았다. '
+  '테스트셋 결과와 같은 결론이다: FI-SMOTE는 순위 성능을 유지하면서 임계값 기준의 탐지 성능(F1·MCC)을 가장 크게 높인다.')
 
 H('3.3 최종 모델과 임계값 선택', 2)
 P('GridSearchCV 결과 랜덤포레스트의 최적 파라미터는 n_estimators=200, min_samples_leaf=5, max_features="sqrt"였다(교차검증 PR-AUC 0.181). '
@@ -278,29 +304,67 @@ P('GridSearchCV 결과 랜덤포레스트의 최적 파라미터는 n_estimators
 fm = pd.DataFrame([[f3(fin['PR-AUC']), f3(fin['ROC-AUC']), f3(fin['Precision']), f3(fin['Recall']), f3(fin['F1']), f3(fin['MCC']),
                     f'{fin["Recall@상위5%"]*100:.1f}%']],
                   columns=['PR-AUC', 'ROC-AUC', 'Precision', 'Recall', 'F1', 'MCC', '상위 5% 포착률'])
-T(fm, '[표 5] 최종 모델(RandomForest 튜닝 + FI-SMOTE) 테스트셋 성능 (임계값 0.5)')
-F('09_pr_curve_cm.png', '[그림 8] Precision-Recall 곡선(왼쪽)과 F1 최대 임계값의 혼동행렬(오른쪽)')
+T(fm, '[표 6] 최종 모델(RandomForest 튜닝 + FI-SMOTE) 테스트셋 성능 (임계값 0.5)')
+F('09_pr_curve_cm.png', '[그림 9] Precision-Recall 곡선(왼쪽)과 F1 최대 임계값의 혼동행렬(오른쪽)')
 tt = th.copy()
 for c in ['Precision', 'Recall', 'F1']: tt[c] = tt[c].map(f3)
 tt['경보 사업장 수'] = tt['경보 사업장 수'].map(lambda x: f'{x:,}')
-T(tt, '[표 6] 임계값에 따른 Precision·Recall 트레이드오프 (테스트셋 102,709곳)', widths=[2.5, 2.8, 2.8, 2.8, 3.5])
+T(tt, '[표 7] 임계값에 따른 Precision·Recall 트레이드오프 (테스트셋 102,709곳)', widths=[2.5, 2.8, 2.8, 2.8, 3.5])
 P('임계값을 낮추면 더 많은 탈퇴 사업장을 찾지만(Recall↑) 잘못 경보하는 사업장도 늘어난다(Precision↓). '
   'F1이 최대가 되는 임계값은 0.48(F1 0.234)이었다. 1주차 교안의 FDS 예시처럼 놓치는 비용이 크다면 임계값을 0.2까지 낮춰 '
   'Recall 46%를 확보하는 운영도 가능하다.')
-F('10_capture_curve.png', '[그림 9] 위험 점수 상위 k% 사업장만 점검했을 때 실제 탈퇴 사업장 포착률', width=11)
+F('10_capture_curve.png', '[그림 10] 위험 점수 상위 k% 사업장만 점검했을 때 실제 탈퇴 사업장 포착률', width=11)
 cap = pd.DataFrame([[1, '37.3%', '37.3배'], [2, '49.4%', '24.7배'], [3, '55.8%', '18.6배'], [5, '62.9%', '12.6배'],
                     [10, '69.0%', '6.9배'], [20, '76.9%', '3.8배']], columns=['점검 대상(상위 %)', '탈퇴 사업장 포착률', '무작위 대비'])
-T(cap, '[표 7] 상위 k% 점검 시 포착률과 무작위 점검 대비 효율', widths=[4, 4, 4])
+T(cap, '[표 8] 상위 k% 점검 시 포착률과 무작위 점검 대비 효율', widths=[4, 4, 4])
 
 H('3.4 주요 영향 요인 (Feature Importance)', 2)
-F('11_feature_importance.png', '[그림 10] 최종 모델의 특성 중요도', width=10.5)
+F('11_feature_importance.png', '[그림 11] 최종 모델의 특성 중요도', width=10.5)
 top = fi.head(6)
 fit = pd.DataFrame({'순위': range(1, 7), '변수': top.index, '중요도': top.values.round(3)})
-T(fit, '[표 8] 특성 중요도 상위 6개', widths=[2, 6, 3])
+T(fit, '[표 9] 특성 중요도 상위 6개', widths=[2, 6, 3])
 B('최근 3개월 안에 새로 등록된 사업장의 탈퇴율은 1.31%로 기존 사업장(0.25%)의 5배였다. 공사 현장처럼 한시적으로 등록되는 사업장이 많기 때문이다.', '1순위 신규진입 (0.156): ')
 B('업력 하위 10% 사업장의 탈퇴율은 2.26%, 상위 10%는 0.04%로 약 55배 차이가 났다.', '2순위 업력 (0.139): ')
 B('규모가 작을수록 탈퇴율이 높았다(1~4명 0.62% vs 100명 이상 0.04%).', '3순위 가입자수 (0.100): ')
 B('입사·퇴사 흐름과 급여 총액의 변화가 그다음으로 중요했다. 인원이 갑자기 들고 나거나 고지금액이 줄어드는 것이 이상 신호다.', '4~5순위 취득률·고지금액증감률: ')
+
+H('3.5 추가 검증: 결과가 믿을 만한가', 2)
+P('앞의 평가는 같은 기준월 안에서 무작위로 나눈 테스트셋을 사용했다. 실제로 쓰려면 과거로 학습한 모델이 미래에도 통해야 하고, '
+  '탈퇴의 절반을 차지하는 건설업이나 정답 정의 방식이 결과를 좌우하지 않아야 한다. 이를 세 가지로 확인하였다.')
+P('① 시간 기반 검증. ', bold_prefix=None).runs[0].bold = True
+P('기준월 2026년 4월(과거 시점 3월·1월·2025년 12월, 정답은 7월 상태)로 데이터를 만들어 같은 방식(FI-SMOTE + 튜닝된 RandomForest)으로 학습하고, '
+  '기준월 2026년 7월 전체 사업장으로 평가하였다. 두 기간의 정답 구간(4→7월, 7→10월)이 겹치지 않으므로 "지난 분기 데이터로 만든 모델을 이번 분기에 적용"하는 상황과 같다.')
+tvt = tv[['PR-AUC', 'ROC-AUC', 'Precision', 'Recall', 'F1', 'MCC', 'Recall@상위5%']].copy()
+for c in tvt.columns: tvt[c] = tvt[c].map(f3)
+tvt.insert(0, '평가 방식', ['무작위 분할 (7월 안 8:2)', '시간 기반 (4월 학습 → 7월 평가)'])
+T(tvt, '[표 10] 무작위 분할과 시간 기반 검증 비교 (임계값 0.5)', widths=[4.4, 1.7, 1.7, 1.8, 1.6, 1.5, 1.5, 2.3], highlight_rows=(1,))
+F('12_time_validation.png', '[그림 12] 무작위 분할과 시간 기반 검증의 상위 k% 포착률 비교', width=11)
+t5, r5_ = tv.iloc[1]['Recall@상위5%'] * 100, tv.iloc[0]['Recall@상위5%'] * 100
+P(f'시간 기반 검증의 ROC-AUC는 {tv.iloc[1]["ROC-AUC"]:.3f}로 무작위 분할({tv.iloc[0]["ROC-AUC"]:.3f})과 거의 같았다. '
+  f'PR-AUC({tv.iloc[1]["PR-AUC"]:.3f})와 상위 5% 포착률({t5:.1f}%)은 무작위 분할({tv.iloc[0]["PR-AUC"]:.3f}, {r5_:.1f}%)보다 조금 낮았지만, '
+  f'상위 20% 이상에서는 차이가 거의 없었다. 과거 분기로 학습한 모델을 다음 분기에 그대로 써도 순위 성능이 대부분 유지된다는 뜻이다.')
+P('② 건설업 분리. ', bold_prefix=None).runs[0].bold = True
+sg = seg[['사업장 수', '탈퇴 수', '탈퇴율(%)', 'PR-AUC', 'ROC-AUC', 'F1', 'Recall@상위5%']].copy()
+sg['사업장 수'] = sg['사업장 수'].map(lambda x: f'{int(x):,}'); sg['탈퇴 수'] = sg['탈퇴 수'].map(lambda x: f'{int(x):,}')
+sg['탈퇴율(%)'] = sg['탈퇴율(%)'].map(lambda x: f'{x:.2f}')
+for c in ['PR-AUC', 'ROC-AUC', 'F1', 'Recall@상위5%']: sg[c] = sg[c].map(f3)
+sg = sg.reset_index().rename(columns={'세부': '구분'})
+T(sg, '[표 11] 최종 모델의 업종별 테스트셋 성능 (Recall@상위5%는 각 집단 안에서 계산)', widths=[3.0, 2.1, 1.6, 1.8, 1.8, 1.9, 1.6, 2.6], highlight_rows=(2,))
+nc = seg.loc['건설업 제외']
+P(f'건설·공사업을 제외한 사업장에서도 ROC-AUC {nc["ROC-AUC"]:.3f}, 위험 점수 상위 5%에서 탈퇴의 {nc["Recall@상위5%"]*100:.1f}%를 찾아 '
+  f'무작위(5%)의 약 {nc["Recall@상위5%"]*100/5:.0f}배 효율을 보였다. 모델이 "건설업이면 위험"만 배운 것이 아니라는 근거다. '
+  '다만 건설업 안에서의 ROC-AUC가 더 높아, 현장 종료처럼 패턴이 뚜렷한 탈퇴를 더 잘 맞히는 경향은 있다.')
+P('③ 정답 정의 민감도. ', bold_prefix=None).runs[0].bold = True
+sn = sens[['탈퇴율(%)', 'PR-AUC', 'ROC-AUC', 'F1', 'MCC', 'Recall@상위5%']].copy()
+sn['탈퇴율(%)'] = sn['탈퇴율(%)'].map(lambda x: f'{x:.2f}')
+for c in ['PR-AUC', 'ROC-AUC', 'F1', 'MCC', 'Recall@상위5%']: sn[c] = sn[c].map(f3)
+sn.insert(0, '정답 정의', ['좁은 정의 (명시적 탈퇴만)', '넓은 정의 (사라진 사업장 포함)'])
+T(sn, '[표 12] 정답 정의에 따른 성능 비교', widths=[4.6, 1.8, 1.8, 1.8, 1.6, 1.6, 2.6])
+wd = sens.iloc[1]
+P(f'3개월 뒤 파일에서 사라진 사업장까지 탈퇴로 보면 탈퇴율이 {wd["탈퇴율(%)"]:.1f}%로 올라가고, PR-AUC는 {wd["PR-AUC"]:.3f}'
+  f'(무작위 기준선 {wd["탈퇴율(%)"]/100:.3f}의 약 {wd["PR-AUC"]/(wd["탈퇴율(%)"]/100):.1f}배), ROC-AUC는 {wd["ROC-AUC"]:.3f}였다. '
+  f'정답 정의를 바꿔도 예측력은 유지되었으며, 이때 가장 중요한 변수는 {wide_fi.index[0]}·{wide_fi.index[1]}·{wide_fi.index[2]} 순이었다. '
+  '사라진 사업장은 인원이 줄어 공개 범위에서 빠진 경우가 많아, 상실률(퇴사 비율)이 중요해진 것으로 해석된다.')
 
 # ───────────────────────── 4. 결론 ─────────────────────────
 H('4. 결론')
@@ -308,9 +372,10 @@ H('4.1 결과 해석 및 의미', 2)
 P('공개된 국민연금 사업장 데이터만으로 3개월 내 탈퇴 사업장을 무작위보다 훨씬 효율적으로 찾아낼 수 있었다. '
   f'최종 모델은 ROC-AUC {fin["ROC-AUC"]:.3f}, 위험 점수 상위 1%만 점검해도 탈퇴 사업장의 37%를, 상위 5%로 63%를 찾아냈다. '
   '반면 개별 사업장을 정확히 맞히는 지표(F1 0.23)는 높지 않은데, 탈퇴 여부가 데이터에 없는 요인(공사 일정, 경영 판단 등)에도 크게 좌우되기 때문이다. '
-  '따라서 이 모델은 "확정 판정"보다 "점검 우선순위를 정하는 도구"로 쓰는 것이 적합하다.')
-P('불균형 처리 측면에서는 단순 SMOTE·ADASYN이 오히려 성능을 떨어뜨린 반면, 특성 중요도를 반영한 FI-SMOTE는 오버샘플링 기법 중 가장 안정적이었고 '
-  'F1·MCC를 가장 크게 높였다. 신용카드 사기(0.17%)에서 확인한 FI-SMOTE의 장점이 0.4% 수준의 다른 도메인에서도 재현된 것이다.')
+  '따라서 이 모델은 "확정 판정"보다 "점검 우선순위를 정하는 도구"로 쓰는 것이 적합하다. '
+  f'이 결과는 과거 분기로 학습해 다음 분기에 적용한 시간 기반 검증(ROC-AUC {tv.iloc[1]["ROC-AUC"]:.3f}), 건설업 제외, 정답 정의 변경에서도 유지되었다.')
+P('불균형 처리 측면에서는 단순 SMOTE·ADASYN이 오히려 순위 성능을 떨어뜨린 반면, 특성 중요도를 반영한 FI-SMOTE는 5-겹 반복 검증에서 '
+  '5번 모두 SMOTE·ADASYN보다 PR-AUC·F1·MCC가 높았고 표준편차도 가장 작았다. 신용카드 사기(0.17%)에서 확인한 FI-SMOTE의 장점이 0.4% 수준의 다른 도메인에서도 재현된 것이다.')
 H('4.2 실행 제언', 2)
 B('매월 공개 데이터가 갱신될 때마다 위험 점수를 계산해 상위 1~5% 사업장을 고용지원 상담·체불 예방 점검 대상으로 우선 선정한다.', '고용센터·지자체: ')
 B('거래처의 위험 점수를 외상 거래 한도나 납품 조건 결정의 보조 지표로 활용한다(재무제표 공개 전 조기 신호).', '거래 기업·금융기관: ')
@@ -320,7 +385,8 @@ H('4.3 연구의 한계', 2)
 B('"탈퇴"에는 폐업 외에 현장 종료, 휴업, 사업장 이전·통합이 섞여 있으며, 공개 데이터만으로는 구분할 수 없다.')
 B('3개월 뒤 파일에서 사라진 사업장 40,135곳을 제외하였다. 이 중 일부는 실제 폐업일 수 있어 탈퇴율이 과소 추정되었을 수 있다.')
 B('고지금액은 기준소득월액 상한이 적용되어 실제 급여와 다르며, 사업자번호가 6자리만 공개되어 사업장 연결 키에 오류가 있을 수 있다.')
-B('한 시점(2026년 7월 기준)만 학습·평가하였다. 계절성과 경기 변화를 반영하려면 여러 기준월로 학습하고 이후 시점으로 검증하는 시간 기반 검증이 필요하다.')
+B('시간 기반 검증은 두 분기(4→7월 학습, 7→10월 평가)만 확인하였다. 계절성과 경기 변화를 반영하려면 여러 기준월을 쌓아 학습하고 1년 이상의 기간으로 검증해야 한다.')
+B('국세청 휴·폐업 조회 등 외부 정보와 결합하지 못해 "진짜 폐업"만을 정답으로 쓰지는 못했다.')
 
 # ───────────────────────── 5. 참고문헌 ─────────────────────────
 H('5. 참고문헌 및 데이터 출처')

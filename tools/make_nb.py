@@ -6,10 +6,10 @@ def md(s): cells.append(nbf.v4.new_markdown_cell(s.strip()))
 def code(s): cells.append(nbf.v4.new_code_cell(s.strip()))
 
 md(r"""
-# 국민연금 가입 사업장 데이터로 본 사업장 탈퇴(폐업) 조기 예측
+# 국민연금 가입 사업장 데이터로 본 사업장 탈퇴 3개월 조기 예측
 ### 데이터분석 기말대체 프로젝트 · 202444085 김철중
 
-**문제:** 지금 국민연금에 가입되어 있는 사업장 중 **3개월 안에 탈퇴(폐업·휴업 등)할 사업장**을 미리 찾을 수 있을까?
+**문제:** 지금 국민연금에 가입되어 있는 사업장 중 **3개월 안에 가입을 탈퇴할 사업장**(폐업·휴업·공사 현장 종료 등)을 미리 찾을 수 있을까?
 
 - 데이터: 공공데이터포털 「국민연금공단_국민연금 가입 사업장 내역」 월별 CSV (2026-03, 04, 06, 07, 10월분)
 - 기준월(T): **2026-07** → 정답(label): **2026-10** 파일에서 가입상태가 '탈퇴(2)'로 바뀌었는가
@@ -433,6 +433,63 @@ md(r"""
 """)
 
 md(r"""
+### 8-2. 한 번의 분할로 결론을 내도 될까? — 층화 5-겹 반복 검증
+위 비교는 테스트셋 한 개(탈퇴 407곳)의 결과라 우연일 수 있다. 학습셋을 층화 5-겹으로 나눠
+**RandomForest × {없음, SMOTE, ADASYN, FI-SMOTE}** 를 5번 반복하고, 평균과 표준편차, 그리고 FI-SMOTE가 이긴 횟수를 센다.
+(오버샘플링은 매번 학습 fold에만 적용)
+""")
+code(r"""
+rep_rows = []
+skf5 = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+t = time.time()
+for k, (tr, va) in enumerate(skf5.split(X_train, y_train)):
+    Xa, ya = X_train.iloc[tr], y_train.iloc[tr]
+    Xv, yv = X_train.iloc[va], y_train.iloc[va]
+    for s_name in ['없음', 'SMOTE', 'ADASYN', 'FI-SMOTE']:
+        if s_name == '없음':
+            Xr, yr = Xa, ya
+        elif s_name == 'FI-SMOTE':
+            Xr, yr = fi_smote_resample(Xa, ya, sampling_strategy=0.1, random_state=k)
+        else:
+            Xr, yr = samplers[s_name].fit_resample(Xa, ya)
+        m = make_model('RandomForest')
+        m.fit(Xr, yr)
+        r = evaluate(yv, m.predict_proba(Xv)[:, 1])
+        r.update({'fold': k + 1, '불균형처리': s_name})
+        rep_rows.append(r)
+    print(f'fold {k+1} 완료 ({time.time()-t:.0f}s)')
+
+rep = pd.DataFrame(rep_rows)
+rep.to_csv('results/imbalance_cv5_folds.csv', index=False, encoding='utf-8-sig')
+metrics5 = ['PR-AUC', 'F1', 'MCC', 'Recall', 'Precision', 'Recall@상위5%']
+rep_summary = rep.groupby('불균형처리')[metrics5].agg(['mean', 'std']).loc[['없음', 'SMOTE', 'ADASYN', 'FI-SMOTE']]
+rep_summary.to_csv('results/imbalance_cv5_summary.csv', encoding='utf-8-sig')
+rep_summary.round(4)
+""")
+code(r"""
+# fold별로 FI-SMOTE가 다른 방법보다 높았던 횟수 (5번 중)
+wins = {}
+for other in ['없음', 'SMOTE', 'ADASYN']:
+    a = rep[rep['불균형처리'] == 'FI-SMOTE'].set_index('fold')
+    b = rep[rep['불균형처리'] == other].set_index('fold')
+    wins[f'FI-SMOTE > {other}'] = {m: int((a[m] > b[m]).sum()) for m in ['PR-AUC', 'F1', 'MCC']}
+wins = pd.DataFrame(wins).T
+wins.to_csv('results/imbalance_cv5_wins.csv', encoding='utf-8-sig')
+
+fig, ax = plt.subplots(1, 3, figsize=(15, 4))
+order = ['없음', 'SMOTE', 'ADASYN', 'FI-SMOTE']
+for i, m in enumerate(['PR-AUC', 'F1', 'MCC']):
+    sns.boxplot(data=rep, x='불균형처리', y=m, order=order, ax=ax[i],
+                palette=['#bdbdbd', '#9ecae1', '#6baed6', '#e6550d'])
+    sns.stripplot(data=rep, x='불균형처리', y=m, order=order, ax=ax[i], color='black', size=4)
+    ax[i].set_title(f'{m} (RandomForest, 5-fold)')
+    ax[i].set_xlabel('')
+save('08b_imbalance_cv5')
+plt.show()
+wins
+""")
+
+md(r"""
 ## 9. 하이퍼파라미터 튜닝: GridSearchCV (9주차)
 불균형 처리 비교에서 **F1과 MCC가 가장 높았던 조합은 RandomForest + FI-SMOTE** 였다.
 RandomForest의 주요 파라미터를 `scoring='average_precision'`(PR-AUC) 기준 3-겹 교차검증 그리드 서치로 고른다.
@@ -544,7 +601,139 @@ for col in fi.index[:3]:
 """)
 
 md(r"""
-## 12. 결과 저장
+## 12. 추가 검증: 결과가 믿을 만한가?
+앞의 평가는 같은 기준월(2026-07) 안에서 무작위로 나눈 테스트셋을 썼다. 실제로 쓰려면 **과거 데이터로 학습한 모델이 미래에도 통하는지**
+확인해야 한다. 또 탈퇴의 절반이 건설업이고, 정답 정의에서 '사라진 사업장'을 제외했으므로 이 두 가지가 결과를 좌우하는지도 점검한다.
+
+먼저 4장의 데이터 만들기 과정을 기준월만 바꿔 다시 쓸 수 있도록 함수로 묶는다.
+""")
+code(r"""
+# 메모리 정리: 앞에서 불러온 월별 원본은 더 이상 쓰지 않음
+import gc
+del base, m1, m3, m4, fut, model
+gc.collect()
+
+def build_dataset(base_ym, m1_ym, m3_ym, m4_ym, fut_ym, missing_as_exit=False):
+    b = load_month(base_ym)
+    b = b[b['가입상태'] == '1']
+    d = b.merge(lag_cols(load_month(m1_ym), '_m1'), on=KEY, how='left')
+    d = d.merge(lag_cols(load_month(m3_ym), '_m3'), on=KEY, how='left')
+    d = d.merge(lag_cols(load_month(m4_ym), '_m4'), on=KEY, how='left')
+    f = load_month(fut_ym)
+    d = d.merge(f[KEY + ['가입상태']].rename(columns={'가입상태': '가입상태_3개월후'}), on=KEY, how='left')
+    if missing_as_exit:       # 사라진 사업장도 탈퇴로 간주
+        d['탈퇴'] = (d['가입상태_3개월후'] != '1').astype(int)
+    else:
+        d = d[d['가입상태_3개월후'].notna()].copy()
+        d['탈퇴'] = (d['가입상태_3개월후'] == '2').astype(int)
+
+    end = pd.Timestamp(base_ym[:4] + '-' + base_ym[4:] + '-01') + pd.offsets.MonthEnd(0)
+    d['1인당고지금액'] = np.where(d['가입자수'] > 0, d['고지금액'] / d['가입자수'], 0)
+    d['상실률'] = np.where(d['가입자수'] > 0, d['상실가입자수'] / d['가입자수'], 0)
+    d['취득률'] = np.where(d['가입자수'] > 0, d['신규취득자수'] / d['가입자수'], 0)
+    d['업력'] = (end - pd.to_datetime(d['적용일자'], errors='coerce')).dt.days / 365.25
+    d['재등록여부'] = d['재등록일자'].notna().astype(int)
+    d['법인여부'] = (d['사업장형태'] == '1').astype(int)
+    d['신규진입'] = d['가입자수_m3'].isna().astype(int)
+    d['인원증감률_1개월'] = rate(d['가입자수'], d['가입자수_m1'])
+    d['인원증감률_3개월'] = rate(d['가입자수'], d['가입자수_m3'])
+    d['인원증감률_4개월'] = rate(d['가입자수'], d['가입자수_m4'])
+    d['고지금액증감률_3개월'] = rate(d['고지금액'], d['고지금액_m3'])
+    d['최근상실자합'] = d['상실가입자수'] + d['상실가입자수_m1'].fillna(0)
+    d['시도코드'] = d['시도코드'].astype(int)
+    d['업종대분류'] = d['업종코드'].str[:2].astype(int)
+    d['건설업'] = d['업종명'].fillna('').str.contains('공사|건설').astype(int)
+    Xd = d[FEATURES].replace([np.inf, -np.inf], np.nan).fillna(0)
+    return Xd, d['탈퇴'], d
+""")
+
+md(r"""
+### 12-1. 시간 기반 검증: 4월 기준으로 학습 → 7월 기준으로 평가
+- 학습: 기준월 **2026-04** (과거 시점 2026-03, 01, 2025-12), 정답은 2026-07 상태
+- 평가: 기준월 **2026-07** 전체 사업장 (앞에서 쓴 데이터), 정답은 2026-10 상태
+- 두 기간의 정답 구간(4→7월, 7→10월)이 겹치지 않으므로, 실제로 "지난 분기 데이터로 만든 모델을 이번 분기에 적용"하는 상황과 같다.
+""")
+code(r"""
+t = time.time()
+X_past, y_past, d_past = build_dataset('202604', '202603', '202601', '202512', '202607')
+print(f'학습(4월 기준): {len(X_past):,}곳, 탈퇴율 {y_past.mean()*100:.3f}%  ({time.time()-t:.0f}s)')
+print(f'평가(7월 기준): {len(X):,}곳, 탈퇴율 {y.mean()*100:.3f}%')
+
+Xp, yp = fi_smote_resample(X_past, y_past, sampling_strategy=0.1, random_state=42)
+oot_model = RandomForestClassifier(random_state=42, n_jobs=-1, **gs.best_params_)
+oot_model.fit(Xp, yp)
+prob_oot = oot_model.predict_proba(X)[:, 1]
+oot = evaluate(y, prob_oot)
+del oot_model, Xp, yp; gc.collect()
+
+compare = pd.DataFrame({'무작위 분할 (7월 안에서 8:2)': final_metrics, '시간 기반 (4월 학습 → 7월 평가)': oot}).T
+compare.round(4)
+""")
+code(r"""
+cap_oot = [recall_at_top(y, prob_oot, p) * 100 for p in pcts]
+plt.figure(figsize=(7, 4))
+plt.plot(pcts, capture, marker='o', color='#e6550d', label='무작위 분할 테스트셋')
+plt.plot(pcts, cap_oot, marker='s', color='#3182bd', label='시간 기반 (4월 학습 → 7월 평가)')
+plt.plot(pcts, pcts, linestyle='--', color='gray', label='무작위 점검')
+for p, c in zip(pcts, cap_oot):
+    plt.text(p, c - 6, f'{c:.0f}%', ha='center', color='#3182bd')
+plt.xlabel('점검 대상 비율 (위험 점수 상위 %)'); plt.ylabel('실제 탈퇴 사업장 포착률 (%)')
+plt.title('시간 기반 검증에서도 포착률이 유지되는가')
+plt.legend()
+save('12_time_validation')
+plt.show()
+pd.DataFrame({'상위 %': pcts, '무작위 분할(%)': np.round(capture, 1), '시간 기반(%)': np.round(cap_oot, 1)})
+""")
+
+md(r"""
+### 12-2. 건설업을 빼도 예측이 되는가
+탈퇴의 절반이 건설·공사업이므로, 모델이 "건설업이면 위험"만 배운 것은 아닌지 확인한다.
+최종 모델의 테스트셋 예측을 건설업 / 비건설업으로 나눠 평가한다.
+""")
+code(r"""
+is_con = df.loc[X_test.index, '건설업'].values == 1
+rows = []
+for name, mask in [('전체', np.ones(len(y_test), bool)), ('건설·공사업', is_con), ('건설업 제외', ~is_con)]:
+    r = evaluate(y_test[mask], prob[mask])
+    r.update({'구분': name, '사업장 수': int(mask.sum()), '탈퇴 수': int(y_test[mask].sum()),
+              '탈퇴율(%)': y_test[mask].mean() * 100})
+    rows.append(r)
+seg = pd.DataFrame(rows).set_index('구분')[['사업장 수', '탈퇴 수', '탈퇴율(%)', 'PR-AUC', 'ROC-AUC', 'F1', 'Recall@상위5%']]
+seg.round(4)
+""")
+
+md(r"""
+### 12-3. 민감도 분석: 사라진 사업장까지 탈퇴로 보면?
+3개월 뒤 파일에서 사라진 40,135곳을 제외했었다. 이들을 모두 탈퇴로 간주(넓은 정의)해도 같은 결론이 나오는지 본다.
+넓은 정의에서는 탈퇴 비율이 7%대로 올라가 불균형이 약해지므로, 오버샘플링 없이 같은 랜덤포레스트로 비교한다.
+""")
+code(r"""
+X_w, y_w, _ = build_dataset('202607', '202606', '202604', '202603', '202610', missing_as_exit=True)
+print(f'넓은 정의: {len(X_w):,}곳, 탈퇴율 {y_w.mean()*100:.2f}%')
+Xw_tr, Xw_te, yw_tr, yw_te = train_test_split(X_w, y_w, test_size=0.2, stratify=y_w, random_state=42)
+wide_model = RandomForestClassifier(random_state=42, n_jobs=-1, **gs.best_params_)
+wide_model.fit(Xw_tr, yw_tr)
+prob_w = wide_model.predict_proba(Xw_te)[:, 1]
+wide = evaluate(yw_te, prob_w)
+wide_fi = pd.Series(wide_model.feature_importances_, index=FEATURES).sort_values(ascending=False)
+del wide_model; gc.collect()
+
+sens = pd.DataFrame({'좁은 정의 (명시적 탈퇴만)': final_metrics, '넓은 정의 (사라짐 포함)': wide}).T
+sens['탈퇴율(%)'] = [y.mean() * 100, y_w.mean() * 100]
+print('넓은 정의 중요도 상위 5:', list(wide_fi.index[:5]))
+sens.round(4)
+""")
+code(r"""
+extra = pd.concat([compare.assign(분석='시간 기반 검증'), seg.reset_index().rename(columns={'구분': '세부'}).assign(분석='업종 분리'),
+                   sens.assign(분석='민감도')], ignore_index=False)
+extra.to_csv('results/extra_validation.csv', encoding='utf-8-sig')
+pd.DataFrame({'상위 %': pcts, '무작위 분할(%)': capture, '시간 기반(%)': cap_oot}).to_csv(
+    'results/time_validation_capture.csv', index=False, encoding='utf-8-sig')
+wide_fi.to_csv('results/wide_definition_importance.csv', encoding='utf-8-sig')
+""")
+
+md(r"""
+## 13. 결과 저장
 """)
 code(r"""
 summary = pd.Series(final_metrics)
