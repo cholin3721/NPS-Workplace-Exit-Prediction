@@ -191,7 +191,7 @@ s.addText([
 card(s, 0.5, 2.95, 4.4, 1.9, HEX.lt2, 'fismote card');
 s.addText([
   { text: '해결: 예시를 늘려서 학습 (FI-SMOTE)', options: { bold: true, fontSize: 15, color: HEX.accent2, breakLine: true } },
-  { text: '탈퇴한 회사 예시가 너무 적어서, 진짜와 비슷한 가상 예시를 만들어 학습시켰다. 중요한 특징은 그대로, 나머지는 다양하게 — 1학기에 직접 만든 방법', options: { fontSize: 13, color: HEX.dk1 } },
+  { text: '탈퇴한 회사 예시가 너무 적어서, 진짜와 비슷한 가상 예시를 만들어 학습시켰다. 1학기에 직접 만든 방법 (원리는 다음 장)', options: { fontSize: 13, color: HEX.dk1 } },
 ], { x: 0.7, y: 3.0, w: 4.0, h: 1.8, valign: 'middle', margin: 0, paraSpaceAfter: 6, isTextBox: true, objectName: 'fismote text' });
 s.addChart(pres.charts.BAR, [{ name: 'F1', labels: N.samplers.map((x) => SAMPLER_PLAIN[x]), values: N.cv5_f1 }], Object.assign({
   x: 5.1, y: 1.0, w: 4.4, h: 3.85, barDir: 'col', chartColors: [HEX.accent3, HEX.accent3, HEX.accent3, HEX.accent1],
@@ -199,6 +199,39 @@ s.addChart(pres.charts.BAR, [{ name: 'F1', labels: N.samplers.map((x) => SAMPLER
   showTitle: true, title: '탈퇴 회사를 맞힌 정도 (F1, 5번 반복 평균)', titleFontSize: 12, titleColor: HEX.dk2, objectName: 'sampler f1 chart',
 }, axis));
 s.addNotes(`어려웠던 점은 탈퇴하는 회사가 1,000곳 중 4곳밖에 안 된다는 겁니다. 그래서 "다 괜찮다"고만 말해도 정답률이 99.6%가 나옵니다. 그래서 정답률 대신 문 닫을 회사를 몇 곳이나 찾았는지로 평가했습니다. 또 탈퇴 예시가 너무 적어서, 제가 1학기에 만든 FI-SMOTE로 진짜와 비슷한 가상 예시를 만들어 학습시켰습니다. 다섯 번 반복해서 비교했는데, 다른 방법들보다 매번 더 잘 찾았습니다. 알고리즘은 교안에서 배운 7개를 비교해서 랜덤포레스트를 골랐습니다.`);
+
+// 6-2. FI-SMOTE 원리 ----------------------------------------------------------
+s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: '어떻게' });
+s.addText('FI-SMOTE: 가상 예시를 "진짜처럼" 만드는 방법', { placeholder: 'title' });
+const steps3 = [
+  ['1', '중요한 특징부터 고른다', '랜덤포레스트로 "탈퇴를 가르는 데 중요한 특징"을 먼저 찾는다 (예: 회사 나이, 직원 수)'],
+  ['2', '헷갈리는 회사 위주로 만든다', '멀쩡한 회사와 비슷해서 구분이 어려운 탈퇴 회사 주변에 예시를 더 많이 만든다'],
+  ['3', '중요한 건 그대로, 나머지는 자유롭게', '새 예시를 만들 때 중요한 특징은 원래 값 근처에, 덜 중요한 특징은 넓게 섞는다'],
+];
+steps3.forEach((st, i) => {
+  const y = 1.0 + i * 1.22;
+  card(s, 0.5, y, 4.5, 1.1, HEX.lt2, 'fi step card ' + (i + 1));
+  s.addText(st[0], { x: 0.6, y: y + 0.15, w: 0.55, h: 0.8, fontSize: 26, bold: true, color: HEX.accent1, align: 'center', valign: 'middle', margin: 0, isTextBox: true, objectName: 'fi step num ' + (i + 1) });
+  s.addText([{ text: st[1], options: { bold: true, fontSize: 14, color: HEX.dk2, breakLine: true } }, { text: st[2], options: { fontSize: 11, color: HEX.dk1 } }],
+    { x: 1.25, y: y + 0.06, w: 3.65, h: 0.98, valign: 'middle', margin: 0, paraSpaceAfter: 3, isTextBox: true, objectName: 'fi step text ' + (i + 1) });
+});
+s.addText('예시: 진짜 탈퇴 회사 A와 B 사이에 새 예시 만들기', { x: 5.25, y: 1.0, w: 4.25, h: 0.3, fontSize: 12, bold: true, color: C.text2, margin: 0, isTextBox: true, objectName: 'example title' });
+const H_ = (t, fill, color) => ({ text: t, options: { bold: true, fill: { color: fill }, color: color || HEX.dk2, align: 'center', fontSize: 11 } });
+const D_ = (t, opts) => ({ text: t, options: Object.assign({ align: 'center', fontSize: 11, color: HEX.dk1 }, opts || {}) });
+s.addTable([
+  [H_('특징', HEX.lt2), H_('회사 A', HEX.lt2), H_('회사 B', HEX.lt2), H_('SMOTE', 'D9E2F3'), H_('FI-SMOTE', HEX.accent1, HEX.lt1)],
+  [D_('회사 나이 ★', { bold: true }), D_('0.8년'), D_('2.0년'), D_('1.4년'), D_('0.9년', { bold: true, color: HEX.accent1 })],
+  [D_('직원 수 ★', { bold: true }), D_('3명'), D_('7명'), D_('5명'), D_('3.4명', { bold: true, color: HEX.accent1 })],
+  [D_('최근 입사자'), D_('0명'), D_('2명'), D_('1명'), D_('1.6명')],
+  [D_('1인당 월급 수준'), D_('250만'), D_('330만'), D_('290만'), D_('265만')],
+], { x: 5.25, y: 1.35, w: 4.25, colW: [1.25, 0.7, 0.7, 0.75, 0.85], rowH: 0.36, border: { type: 'solid', pt: 0.75, color: 'C9D1DC' }, margin: 0.03, objectName: 'example table' });
+card(s, 5.25, 3.3, 4.25, 1.4, HEX.dk2, 'example message card');
+s.addText([
+  { text: 'SMOTE: 모든 특징을 똑같이 반씩 섞는다 → 탈퇴 회사의 핵심 모습(어리고 작음)이 흐려짐', options: { fontSize: 11, color: HEX.lt1, breakLine: true } },
+  { text: 'FI-SMOTE: ★중요한 특징은 A 그대로, 나머지만 섞는다 → 진짜 같은 예시', options: { fontSize: 11, bold: true, color: HEX.accent4 } },
+], { x: 5.4, y: 3.35, w: 3.95, h: 1.3, valign: 'middle', margin: 0, paraSpaceAfter: 6, isTextBox: true, objectName: 'example message' });
+sourceNote(s, '표의 숫자는 원리를 설명하기 위한 가상값 · FI-SMOTE: 조규철·김철중, 한국컴퓨터정보학회 학술발표 2026 (신용카드 사기 0.17%에서도 효과 확인)');
+s.addNotes('FI-SMOTE가 어떻게 가상 예시를 만드는지 설명드리겠습니다. 먼저 랜덤포레스트로 탈퇴를 가르는 데 중요한 특징, 예를 들어 회사 나이와 직원 수를 찾습니다. 그다음 멀쩡한 회사와 비슷해서 헷갈리는 탈퇴 회사 주변에 예시를 더 많이 만듭니다. 마지막으로 두 탈퇴 회사 사이에서 새 예시를 만들 때, 중요한 특징은 원래 값 근처에 두고 덜 중요한 특징만 넓게 섞습니다. 오른쪽 예시처럼 기존 SMOTE는 모든 특징을 똑같이 반씩 섞어서 "어리고 작은 회사"라는 탈퇴 회사의 핵심 모습이 흐려지는데, FI-SMOTE는 그 핵심을 지키면서 나머지만 다양하게 만듭니다. 이 방법은 제가 1학기에 학술대회 논문으로 제안했고, 신용카드 사기 데이터에서도 효과를 확인했습니다.');
 
 // 7. 결과 ---------------------------------------------------------------------
 pres.addSection({ title: '결과' });
