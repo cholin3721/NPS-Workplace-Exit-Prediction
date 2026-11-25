@@ -1,8 +1,7 @@
 """
 FI-SMOTE v4 (Feature-Importance Weighted Adaptive SMOTE)
 
-출처: 본인(김철중)이 2026-1학기에 작성한 FI-SMOTE v4 연구 코드
-      (github.com/cholin3721/Feature-Importance-SMOTE) 의 핵심 함수를 가져와
+출처: 본인(김철중)이 2026-1학기에 작성한 FI-SMOTE v4 코드의 핵심 함수를 가져와
       이번 프로젝트에 맞게 두 가지만 바꿨다.
   1) sampling_strategy 인자 추가: 소수 클래스를 다수 클래스의 몇 배까지 늘릴지 지정
      (원본은 항상 1:1 완전 균형 → 40만 행 데이터에서는 학습 시간이 너무 길어짐)
